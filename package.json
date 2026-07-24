@@ -20,6 +20,9 @@
     "react-dom": "19.2.4",
     "server-only": "^0.0.1"
   },
+  "engines": {
+    "node": ">=20 <21"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.0",
