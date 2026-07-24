@@ -1,0 +1,36 @@
+# 環境変数（.env.example は追跡する）
+.env
+.env.*
+!.env.example
+
+# 依存パッケージ・ビルド成果物
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# テスト・カバレッジ
+coverage/
+.vitest/
+
+# TypeScript
+*.tsbuildinfo
+
+# デプロイ
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ログ
+*.log
+npm-debug.log*
+
+# エディタ
+.vscode/settings.json
+.idea/
+
+# Claude Code ローカル設定
+.claude/settings.local.json

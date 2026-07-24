@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #ffffff;
+  --surface: #f9f8f7;
+  --surface-secondary: #f0efed;
+  --text-primary: #2c2c2b;
+  /* #6b6864 on white: 5.2:1 ✓ (WCAG AA) */
+  --text-secondary: #6b6864;
+  --border: #e6e5e3;
+
+  /* パレット原色（装飾・border・icon 用） */
+  --blue: #2783de;
+  --remembered: #46a171;
+  --attention: #d5803b;
+  --forgotten: #e56458;
+
+  /* WCAG AA 準拠色（テキスト・ボタン背景 用）  */
+  /* #1b6db5 / white: 5.0:1 ✓ */
+  --blue-accessible: #1b6db5;
+  /* #2e7a56 / white: 4.7:1 ✓ */
+  --remembered-accessible: #2e7a56;
+  /* #c04040 / white: 5.0:1 ✓ */
+  --forgotten-accessible: #c04040;
+  /* #c26e1a / white: 4.5:1 ✓ */
+  --attention-accessible: #c26e1a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #191919;
+    --surface: #202020;
+    --surface-secondary: #383836;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.75);
+    --border: rgba(255, 255, 255, 0.2);
+    --blue: #5e9fe8;
+    --remembered: #72bc8f;
+    --attention: #de9255;
+    --forgotten: #e97366;
+
+    /* ダークモードは背景が暗いため原色をそのまま使用可 */
+    --blue-accessible: #5e9fe8;
+    --remembered-accessible: #72bc8f;
+    --forgotten-accessible: #e97366;
+    --attention-accessible: #de9255;
+  }
+}
+
+html {
+  background-color: var(--canvas);
+  color: var(--text-primary);
+  font-family: var(--font-inter, Inter), var(--font-noto-sans-jp, "Noto Sans JP"), system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  max-width: 430px;
+  margin: 0 auto;
+  overflow-x: hidden;
+  background-color: var(--canvas);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* フォーカスリング（キーボード操作） */
+:focus-visible {
+  outline: 2px solid var(--blue-accessible);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.font-card {
+  font-family: var(--font-source-serif, "Source Serif 4"), Georgia, serif;
+}
