@@ -3,6 +3,7 @@ import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoint
 import { notion } from './client';
 import { NOTION_DB, SENTENCE_PROPS, SENTENCE_STATUS } from '@/lib/schema/notion-ids';
 import { todayJST } from '@/lib/date';
+import { parseBlock, normalizeForDedup, nextOrderAfter } from './script-parser';
 import type { SentenceCard } from '@/types';
 
 function extractText(prop: PageObjectResponse['properties'][string]): string {
@@ -123,13 +124,15 @@ export async function fetchSentencesByScript(scriptId: string): Promise<Sentence
   return pages.map(mapPageToSentence);
 }
 
-// Done 数・総数・次回復習最小日を返す
+// Done 数・総数・次回復習最小日・未学習文の有無を返す
 export async function countSentencesForScript(
   scriptId: string,
-): Promise<{ done: number; total: number; minNextReview: string | null }> {
+): Promise<{ done: number; total: number; minNextReview: string | null; hasUnscheduled: boolean }> {
   let done = 0;
   let total = 0;
   let minNextReview: string | null = null;
+  // Not started または Next Review 未設定の文が1件でもあれば true
+  let hasUnscheduled = false;
   let cursor: string | undefined;
 
   do {
@@ -146,15 +149,24 @@ export async function countSentencesForScript(
       if ('properties' in page) {
         total++;
         const p = (page as PageObjectResponse).properties;
-        if (extractSentenceStatus(p[SENTENCE_PROPS.STATUS]) === 'Done') done++;
-        const nr = extractDate(p[SENTENCE_PROPS.NEXT_REVIEW]);
-        if (nr && (minNextReview === null || nr < minNextReview)) minNextReview = nr;
+        const status = extractSentenceStatus(p[SENTENCE_PROPS.STATUS]);
+        if (status === 'Done') {
+          done++;
+        } else {
+          const nr = extractDate(p[SENTENCE_PROPS.NEXT_REVIEW]);
+          if (nr) {
+            if (minNextReview === null || nr < minNextReview) minNextReview = nr;
+          } else {
+            // Not started か Next Review 未設定 → 今すぐ学習可能
+            hasUnscheduled = true;
+          }
+        }
       }
     }
     cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
   } while (cursor);
 
-  return { done, total, minNextReview };
+  return { done, total, minNextReview, hasUnscheduled };
 }
 
 export interface SentenceSrsState {
@@ -187,28 +199,6 @@ export async function fetchSentenceSrsState(sentenceId: string): Promise<Sentenc
   }
 }
 
-// 照合用正規化: 小文字化・句読点除去・スペース正規化
-function normalizeForDedup(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s']/g, '')
-    .replace(/\s+/g, ' ');
-}
-
-// "英文 (日本語訳)" または "英文 （日本語訳）" 形式を分割する
-function parseBlock(text: string): { sentence: string; meaning: string } {
-  const lastOpenParen = Math.max(text.lastIndexOf('('), text.lastIndexOf('（'));
-  if (lastOpenParen > 0) {
-    const enPart = text.slice(0, lastOpenParen).trim();
-    const remainder = text.slice(lastOpenParen + 1).trim();
-    const jaPart = remainder.replace(/[）)]\s*$/, '').trim();
-    if (enPart.length > 0 && jaPart.length > 0) {
-      return { sentence: enPart, meaning: jaPart };
-    }
-  }
-  return { sentence: text, meaning: '' };
-}
 
 export interface SyncResult {
   created: number;
@@ -275,7 +265,8 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
 
   let created = 0;
   let unchanged = 0;
-  let order = existing.length;
+  // F-2: 既存 Order の最大値 + 1 から開始（length ベースだと既存に gap があると重複する）
+  let nextOrder = nextOrderAfter(existing.map((s) => s.order));
 
   for (const { sentence, meaning } of parsedBlocks) {
     const key = normalizeForDedup(sentence);
@@ -290,7 +281,7 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
         [SENTENCE_PROPS.SENTENCE]: { title: [{ text: { content: sentence } }] },
         [SENTENCE_PROPS.MEANING]: { rich_text: [{ text: { content: meaning } }] },
         [SENTENCE_PROPS.SCRIPT]: { relation: [{ id: scriptId }] },
-        [SENTENCE_PROPS.ORDER]: { number: order },
+        [SENTENCE_PROPS.ORDER]: { number: nextOrder },
         [SENTENCE_PROPS.STATUS]: { status: { name: SENTENCE_STATUS.NEW } },
         [SENTENCE_PROPS.INTERVAL_DAYS]: { number: 0 },
         [SENTENCE_PROPS.CORRECT_STREAK]: { number: 0 },
@@ -300,11 +291,11 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
     });
 
     existingNormalized.set(key, true);
-    order++;
+    nextOrder++;
     created++;
   }
 
-  return { created, unchanged, total: order };
+  return { created, unchanged, total: existing.length + created };
 }
 
 export async function updateSentenceAfterReview(

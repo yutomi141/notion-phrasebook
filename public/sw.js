@@ -1,16 +1,12 @@
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_STATIC = `phrasebook-static-${CACHE_VERSION}`;
 
-// 認証が不要な静的ページのみプリキャッシュ
-const PRECACHE_URLS = ['/'];
+// キャッシュ対象の静的アセットパターン（ナビゲーション・HTML・API は除外）
+const STATIC_PREFIXES = ['/_next/static/', '/icons/'];
+const STATIC_EXACT = new Set(['/favicon.ico', '/manifest.webmanifest']);
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches
-      .open(CACHE_STATIC)
-      .then((c) => c.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting()),
-  );
+  e.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (e) => {
@@ -30,10 +26,23 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   const { pathname } = url;
 
-  // API・認証エンドポイントはキャッシュしない（認証済みデータをキャッシュに残さない）
-  if (pathname.startsWith('/api/')) return;
+  // API・認証エンドポイントはキャッシュしない
+  if (pathname.startsWith('/api/') || pathname.startsWith('/auth/')) return;
 
-  // 静的アセット: キャッシュ優先
+  // ナビゲーションリクエスト（HTML ページ）はキャッシュしない
+  if (e.request.mode === 'navigate') return;
+
+  // Accept ヘッダーに text/html が含まれていればキャッシュしない
+  const accept = e.request.headers.get('Accept') ?? '';
+  if (accept.includes('text/html')) return;
+
+  // 静的アセットのみキャッシュ対象
+  const isStaticAsset =
+    STATIC_PREFIXES.some((prefix) => pathname.startsWith(prefix)) ||
+    STATIC_EXACT.has(pathname);
+
+  if (!isStaticAsset) return;
+
   e.respondWith(
     caches.match(e.request).then((cached) => cached ?? fetchAndCache(e.request)),
   );

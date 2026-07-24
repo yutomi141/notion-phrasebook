@@ -2,6 +2,7 @@ import 'server-only';
 import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 import { notion } from './client';
 import { NOTION_DB, SCRIPT_PROPS } from '@/lib/schema/notion-ids';
+import { todayJST } from '@/lib/date';
 import type { ScriptCard } from '@/types';
 
 function extractText(prop: PageObjectResponse['properties'][string]): string {
@@ -103,6 +104,7 @@ export async function updateScriptAfterReview(
   currentStatus: 'Draft' | 'Memorizing' | 'Perfect',
   sentenceResult: 'remembered' | 'forgotten',
   minNextReview: string | null,
+  hasUnscheduled: boolean = false,
 ): Promise<void> {
   let newStatus: 'Draft' | 'Memorizing' | 'Perfect' = currentStatus;
 
@@ -117,10 +119,16 @@ export async function updateScriptAfterReview(
     newStatus = 'Perfect';
   }
 
-  // allDone のとき明示的に null をセット（省略すると古い値が残る）
-  const nextReviewProp = allDone || !minNextReview
+  // allDone → null クリア
+  // 未学習文あり → 今日のJST日付（今すぐ学習可能）
+  // それ以外 → 全Sentenceの最小 Next Review
+  const nextReviewProp: { date: { start: string } | null } = allDone
     ? { date: null }
-    : { date: { start: minNextReview } };
+    : hasUnscheduled
+    ? { date: { start: todayJST() } }
+    : minNextReview
+    ? { date: { start: minNextReview } }
+    : { date: null };
 
   await notion.pages.update({
     page_id: scriptId,

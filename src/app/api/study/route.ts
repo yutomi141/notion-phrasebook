@@ -3,17 +3,13 @@ import { auth } from '@/auth';
 import { fetchPhraseSrsState, updatePhraseAfterReview } from '@/lib/notion/phrase-db';
 import { hasReviewLog, writeReviewLog } from '@/lib/notion/review-log';
 import { calculateNextInterval } from '@/lib/srs/algorithm';
-import { addDaysJST, todayJST } from '@/lib/date';
+import { addDaysJST } from '@/lib/date';
+import { validateReviewPayload } from '@/lib/validation/review-payload';
 import type { ReviewPayload } from '@/types';
 
 interface RequestBody {
   payload: ReviewPayload;
 }
-
-const VALID_RESULTS = new Set(['remembered', 'forgotten']);
-const VALID_DIRECTIONS = new Set(['EN_TO_JA', 'JA_TO_EN']);
-const VALID_ITEM_TYPES = new Set(['phrase', 'sentence']);
-const MAX_SESSION_ID_LEN = 128;
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -28,27 +24,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { payload } = body;
+  // F-4: /api/study は phrase のみ許可
+  const validation = validateReviewPayload(body?.payload, 'phrase');
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
+  }
 
-  // 厳格なペイロード検証
-  if (
-    !payload?.itemId ||
-    typeof payload.itemId !== 'string' ||
-    !payload.sessionId ||
-    typeof payload.sessionId !== 'string' ||
-    payload.sessionId.length > MAX_SESSION_ID_LEN
-  ) {
-    return NextResponse.json({ error: 'Missing or invalid required fields' }, { status: 400 });
-  }
-  if (!VALID_RESULTS.has(payload.result)) {
-    return NextResponse.json({ error: 'Invalid result value' }, { status: 400 });
-  }
-  if (!VALID_DIRECTIONS.has(payload.direction)) {
-    return NextResponse.json({ error: 'Invalid direction value' }, { status: 400 });
-  }
-  if (!VALID_ITEM_TYPES.has(payload.itemType)) {
-    return NextResponse.json({ error: 'Invalid itemType value' }, { status: 400 });
-  }
+  const { payload } = body;
 
   try {
     // 冪等チェック: SRS更新前にログ存在確認
@@ -65,8 +47,8 @@ export async function POST(req: NextRequest) {
     const previousInterval = state.intervalDays;
     const srs = calculateNextInterval(payload.result, state.intervalDays, state.correctStreak);
     const nextReviewDate = addDaysJST(new Date(), srs.nextIntervalDays);
+    // F-5: Last Reviewed も Review Log も同一のサーバー側 ISO タイムスタンプを使用
     const reviewedAt = new Date().toISOString();
-    const reviewedAtDate = todayJST();
 
     const newReviewCount = state.reviewCount + 1;
     const newForgottenCount =
@@ -78,7 +60,7 @@ export async function POST(req: NextRequest) {
       srs.nextIntervalDays,
       srs.newStreak,
       nextReviewDate,
-      reviewedAtDate,
+      reviewedAt,
       newReviewCount,
       newForgottenCount,
     );
