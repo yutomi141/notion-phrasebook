@@ -34,3 +34,6 @@ npm-debug.log*
 
 # Claude Code ローカル設定
 .claude/settings.local.json
+
+# 監査用ZIPなど一時ファイル
+*.zip
