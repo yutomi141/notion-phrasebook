@@ -1,28 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { calculateNextInterval } from '@/lib/srs/algorithm';
-import { normalizePhrase } from '@/lib/notion/ingest';
-
-// normalizePhrase はサーバー専用インポートを含まないため直接テスト可能
-describe('normalizePhrase', () => {
-  it('小文字化・トリムする', () => {
-    expect(normalizePhrase('  Hello World  ')).toBe('hello world');
-  });
-
-  it('句読点（! . - など）を除去する', () => {
-    // アポストロフィは保持、ハイフン・感嘆符は除去
-    expect(normalizePhrase("It's a no-brainer!")).toBe("it's a nobrainer");
-    expect(normalizePhrase('Hello, world.')).toBe('hello world');
-  });
-
-  it('複数スペースを1つに正規化する', () => {
-    expect(normalizePhrase('too  many   spaces')).toBe('too many spaces');
-  });
-
-  it('同じ内容は同じ正規化結果になる（冪等性）', () => {
-    const phrase = 'Cut corners';
-    expect(normalizePhrase(normalizePhrase(phrase))).toBe(normalizePhrase(phrase));
-  });
-});
 
 describe('SRS Mastered 後の再出題', () => {
   it('Mastered 状態で forgotten → Reviewing に戻る', () => {

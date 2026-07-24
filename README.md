@@ -25,7 +25,6 @@
 | 認証 | Auth.js v5 (NextAuth) + Google OAuth |
 | テスト | Vitest |
 | Notion | @notionhq/client（サーバー側のみ） |
-| AI | @anthropic-ai/sdk (Claude Opus 4.8, `/ingest` 機能) |
 
 ## ローカル開発環境のセットアップ
 
@@ -68,7 +67,6 @@ npm run dev
 | `AUTH_ALLOWED_EMAIL` | アクセスを許可するGmailアドレス |
 | `AUTH_GOOGLE_ID` | Google OAuth クライアントID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth クライアントシークレット |
-| `ANTHROPIC_API_KEY` | Claude API キー（`/ingest` 機能のみ使用・任意） |
 
 ## コマンド
 
@@ -89,7 +87,6 @@ npm run test         # Vitestでユニットテスト実行
 | スクリプト一覧 | `/script` |
 | スクリプト全文表示 | `/script/[id]` |
 | 1文ずつ学習 | `/script/sentence` |
-| AI フレーズ取り込み | `/ingest`（ホームには非表示） |
 
 ### スクリプト同期
 
@@ -100,14 +97,6 @@ Script Library の Notion ページ本文からSentence DBへ文を取り込む�
 POST /api/scripts/{id}/sync
 ```
 
-### Normalized Phrase バックフィル
-
-既存フレーズに Normalized Phrase が未設定の場合は以下の API で一括更新できる：
-
-```
-POST /api/admin/backfill-normalized
-```
-
 ## ドキュメント
 
 - `docs/implementation-plan.md` — 技術構成・DB設計・実装順序
@@ -116,7 +105,7 @@ POST /api/admin/backfill-normalized
 
 ## セキュリティ
 
-- Notionトークン・AnthropicキーはサーバーAPI Routesでのみ使用し、ブラウザに公開しない
+- NotionトークンはサーバーAPI Routesでのみ使用し、ブラウザに公開しない
 - `.env` はGitにコミットしない（`.gitignore` で除外済み）
 - アクセスはGoogleログイン＋メールアドレス制限で本人のみに限定する
 - Proxyは Auth.js の `auth()` で JWT 検証済みセッションを確認する
@@ -127,6 +116,6 @@ POST /api/admin/backfill-normalized
 - [x] フェーズ1：データ契約の確定（DBスキーマ拡張・新規DB作成）
 - [x] フェーズ2：オンラインMVP（フレーズ学習）
 - [x] フェーズ3：Script対応（全文・1文モード）
-- [x] フェーズ4：AI取り込み（会話からの自動登録）
-- [ ] フェーズ5：品質向上（検索・統計・テスト拡充）
+- [x] フェーズ4：品質向上（監査修正・冪等性・セキュリティ）
+- [ ] フェーズ5：検索・統計・テスト拡充
 - [ ] フェーズ6：オフライン対応（回答キュー・完全キャッシュ）
