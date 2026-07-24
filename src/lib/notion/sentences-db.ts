@@ -4,6 +4,8 @@ import { notion } from './client';
 import { NOTION_DB, SENTENCE_PROPS, SENTENCE_STATUS } from '@/lib/schema/notion-ids';
 import { todayJST } from '@/lib/date';
 import { parseBlock, normalizeForDedup, nextOrderAfter } from './script-parser';
+import { aggregateSentences } from './sentence-agg';
+import type { SentenceAggInput } from './sentence-agg';
 import type { SentenceCard } from '@/types';
 
 function extractText(prop: PageObjectResponse['properties'][string]): string {
@@ -124,15 +126,11 @@ export async function fetchSentencesByScript(scriptId: string): Promise<Sentence
   return pages.map(mapPageToSentence);
 }
 
-// Done 数・総数・次回復習最小日・未学習文の有無を返す
+// Done 数・総数・次回復習最小日・未学習文の有無を返す（Done 文の Next Review も集計対象）
 export async function countSentencesForScript(
   scriptId: string,
 ): Promise<{ done: number; total: number; minNextReview: string | null; hasUnscheduled: boolean }> {
-  let done = 0;
-  let total = 0;
-  let minNextReview: string | null = null;
-  // Not started または Next Review 未設定の文が1件でもあれば true
-  let hasUnscheduled = false;
+  const inputs: SentenceAggInput[] = [];
   let cursor: string | undefined;
 
   do {
@@ -147,26 +145,17 @@ export async function countSentencesForScript(
 
     for (const page of response.results) {
       if ('properties' in page) {
-        total++;
         const p = (page as PageObjectResponse).properties;
-        const status = extractSentenceStatus(p[SENTENCE_PROPS.STATUS]);
-        if (status === 'Done') {
-          done++;
-        } else {
-          const nr = extractDate(p[SENTENCE_PROPS.NEXT_REVIEW]);
-          if (nr) {
-            if (minNextReview === null || nr < minNextReview) minNextReview = nr;
-          } else {
-            // Not started か Next Review 未設定 → 今すぐ学習可能
-            hasUnscheduled = true;
-          }
-        }
+        inputs.push({
+          status: extractSentenceStatus(p[SENTENCE_PROPS.STATUS]),
+          nextReview: extractDate(p[SENTENCE_PROPS.NEXT_REVIEW]),
+        });
       }
     }
     cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
   } while (cursor);
 
-  return { done, total, minNextReview, hasUnscheduled };
+  return aggregateSentences(inputs);
 }
 
 export interface SentenceSrsState {
