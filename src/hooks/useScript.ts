@@ -27,8 +27,17 @@ async function fetchDueSentences(): Promise<SentenceCard[]> {
 }
 
 async function submitSentenceReview(payload: ReviewPayload) {
+  // オフライン確定なら即座にキューへ
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (isQueueAvailable()) {
+      await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/sentence-study' });
+      return { ok: true, queued: true };
+    }
+    throw new Error('復習記録の保存に失敗しました');
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
 
   let res: Response;
   try {
@@ -38,13 +47,10 @@ async function submitSentenceReview(payload: ReviewPayload) {
       body: JSON.stringify({ payload }),
       signal: controller.signal,
     });
-  } catch (err) {
-    // ネットワークエラー・10秒タイムアウト → キューへ
-    console.warn('[submitSentenceReview] fetch error caught:', err);
+  } catch {
+    // ネットワークエラー・タイムアウト → キューへ
     if (isQueueAvailable()) {
-      console.warn('[submitSentenceReview] calling enqueue...');
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/sentence-study' });
-      console.warn('[submitSentenceReview] enqueue done, returning queued');
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');

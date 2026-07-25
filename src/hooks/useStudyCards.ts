@@ -13,8 +13,17 @@ async function fetchCards(): Promise<PhraseCard[]> {
 }
 
 async function submitReview(payload: ReviewPayload) {
+  // オフライン確定なら即座にキューへ（HTTP/2接続キャッシュによるfetchハングを防ぐ）
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (isQueueAvailable()) {
+      await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
+      return { ok: true, queued: true };
+    }
+    throw new Error('復習記録の保存に失敗しました');
+  }
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
 
   let res: Response;
   try {
@@ -24,13 +33,10 @@ async function submitReview(payload: ReviewPayload) {
       body: JSON.stringify({ payload }),
       signal: controller.signal,
     });
-  } catch (err) {
-    // ネットワークエラー・10秒タイムアウト → キューへ
-    console.warn('[submitReview] fetch error caught:', err);
+  } catch {
+    // ネットワークエラー・タイムアウト → キューへ
     if (isQueueAvailable()) {
-      console.warn('[submitReview] calling enqueue...');
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
-      console.warn('[submitReview] enqueue done, returning queued');
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');
