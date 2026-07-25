@@ -100,6 +100,7 @@ export function useDueSentences() {
 export function useSubmitSentenceReview() {
   return useMutation({
     mutationFn: ({ payload }: { payload: ReviewPayload }) => submitSentenceReview(payload),
+    networkMode: 'always',
   });
 }
 
