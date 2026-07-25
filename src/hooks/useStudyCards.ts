@@ -13,20 +13,26 @@ async function fetchCards(): Promise<PhraseCard[]> {
 }
 
 async function submitReview(payload: ReviewPayload) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
   let res: Response;
   try {
     res = await fetch('/api/study', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ payload }),
+      signal: controller.signal,
     });
   } catch {
-    // ネットワークエラー → キューへ
+    // ネットワークエラー・30秒タイムアウト → キューへ
     if (isQueueAvailable()) {
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (res.ok) {
