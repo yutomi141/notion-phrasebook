@@ -116,6 +116,8 @@ export interface PhraseSrsState {
   reviewCount: number;
   forgottenCount: number;
   status: 'New' | 'Reviewing' | 'Mastered';
+  syncVersion: string;   // I-4: 最後に適用した logEntry（sessionId:itemId）
+  stateVersion: string;  // I-5: Notion page.last_edited_time
 }
 
 export async function fetchPhraseSrsState(phraseId: string): Promise<PhraseSrsState | null> {
@@ -132,6 +134,8 @@ export async function fetchPhraseSrsState(phraseId: string): Promise<PhraseSrsSt
       reviewCount: extractNumber(p[PHRASE_PROPS.REVIEW_COUNT]),
       forgottenCount: extractNumber(p[PHRASE_PROPS.FORGOTTEN_COUNT]),
       status: extractStatus(p[PHRASE_PROPS.STATUS]),
+      syncVersion: extractText(p[PHRASE_PROPS.SYNC_VERSION]),
+      stateVersion: page.last_edited_time,
     };
   } catch {
     return null;
@@ -147,6 +151,7 @@ export async function updatePhraseAfterReview(
   reviewedAt: string,
   newReviewCount: number,
   newForgottenCount: number,
+  syncVersion: string,  // I-4: SRS更新と同一呼び出しで書き込む
 ): Promise<void> {
   await notion.pages.update({
     page_id: phraseId,
@@ -158,6 +163,7 @@ export async function updatePhraseAfterReview(
       [PHRASE_PROPS.LAST_REVIEWED]: { date: { start: reviewedAt } },
       [PHRASE_PROPS.REVIEW_COUNT]: { number: newReviewCount },
       [PHRASE_PROPS.FORGOTTEN_COUNT]: { number: newForgottenCount },
+      [PHRASE_PROPS.SYNC_VERSION]: { rich_text: [{ text: { content: syncVersion } }] },
     },
   });
 }

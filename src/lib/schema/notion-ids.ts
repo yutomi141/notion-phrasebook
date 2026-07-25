@@ -48,6 +48,7 @@ export const SENTENCE_PROPS = {
   CORRECT_STREAK: 'Correct Streak',
   REVIEW_COUNT:   'Review Count',
   FORGOTTEN_COUNT:'Forgotten Count',
+  SYNC_VERSION:   'Sync Version',
 } as const;
 
 // Notion DDL の制約でデフォルト名になっているため定数でマッピング

@@ -165,6 +165,8 @@ export interface SentenceSrsState {
   forgottenCount: number;
   status: 'Not started' | 'In progress' | 'Done';
   scriptId: string;
+  syncVersion: string;   // I-4: 最後に適用した logEntry（sessionId:itemId）
+  stateVersion: string;  // I-5: Notion page.last_edited_time
 }
 
 export async function fetchSentenceSrsState(sentenceId: string): Promise<SentenceSrsState | null> {
@@ -182,6 +184,8 @@ export async function fetchSentenceSrsState(sentenceId: string): Promise<Sentenc
       forgottenCount: extractNumber(p[SENTENCE_PROPS.FORGOTTEN_COUNT]),
       status: extractSentenceStatus(p[SENTENCE_PROPS.STATUS]),
       scriptId: extractRelationId(p[SENTENCE_PROPS.SCRIPT]),
+      syncVersion: p[SENTENCE_PROPS.SYNC_VERSION] ? extractText(p[SENTENCE_PROPS.SYNC_VERSION]) : '',
+      stateVersion: page.last_edited_time,
     };
   } catch {
     return null;
@@ -296,6 +300,7 @@ export async function updateSentenceAfterReview(
   reviewedAt: string,
   newReviewCount: number,
   newForgottenCount: number,
+  syncVersion: string,  // I-4: SRS更新と同一呼び出しで書き込む
 ): Promise<void> {
   const notionStatus =
     newStatusKey === 'Mastered' ? SENTENCE_STATUS.MASTERED : SENTENCE_STATUS.REVIEWING;
@@ -310,6 +315,7 @@ export async function updateSentenceAfterReview(
       [SENTENCE_PROPS.LAST_REVIEWED]: { date: { start: reviewedAt } },
       [SENTENCE_PROPS.REVIEW_COUNT]: { number: newReviewCount },
       [SENTENCE_PROPS.FORGOTTEN_COUNT]: { number: newForgottenCount },
+      [SENTENCE_PROPS.SYNC_VERSION]: { rich_text: [{ text: { content: syncVersion } }] },
     },
   });
 }
