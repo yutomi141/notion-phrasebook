@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Source_Serif_4, Noto_Sans_JP } from 'next/font/google';
 import { QueryProvider } from '@/components/ui/QueryProvider';
 import { SwRegistrar } from '@/components/ui/SwRegistrar';
+import { OfflineQueueBadge } from '@/components/ui/OfflineQueueBadge';
 import './globals.css';
 
 const inter = Inter({
@@ -41,7 +42,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col">
         <SwRegistrar />
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          {children}
+          <OfflineQueueBadge />
+        </QueryProvider>
       </body>
     </html>
   );

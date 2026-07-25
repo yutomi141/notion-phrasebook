@@ -109,55 +109,58 @@ export async function POST(req: NextRequest) {
     }
 
     const reviewedAt = resolveReviewedAt(payload.reviewedAt);
-    const previousInterval = state.intervalDays;
-    let finalSrs: SRSResult;
-    let finalNextReview: string;
-    let scriptId = state.scriptId;
 
+    // F-2: SRS適用済みの再送分岐 — 保存済み値をそのまま使い、再計算しない
     if (state.syncVersion === logEntry) {
-      // SRS更新は適用済み — ログだけ追記
-      finalSrs = calculateNextInterval(payload.result, state.intervalDays, state.correctStreak);
-      finalNextReview = addDaysJST(new Date(), finalSrs.nextIntervalDays);
-    } else {
-      // Step 3: SRS更新 + I-5 楽観ロック
-      const result = await applySentenceSrsWithOptimisticLock(
-        payload.itemId, payload.result, logEntry, reviewedAt,
+      const srsStatus =
+        state.status === 'Done' ? 'Mastered' : state.status === 'In progress' ? 'Reviewing' : 'New';
+      await writeReviewLog(payload, reviewedAt, undefined, state.intervalDays);
+      return NextResponse.json({
+        ok: true,
+        replayed: true,
+        nextReview: state.nextReview,
+        newStatus: srsStatus,
+        newInterval: state.intervalDays,
+      });
+    }
+
+    const previousInterval = state.intervalDays;
+
+    // Step 3: SRS更新 + I-5 楽観ロック
+    const result = await applySentenceSrsWithOptimisticLock(
+      payload.itemId, payload.result, logEntry, reviewedAt,
+    );
+    if ('notFound' in result) {
+      return NextResponse.json({ error: 'Sentence not found' }, { status: 404 });
+    }
+    if ('conflict' in result) {
+      return NextResponse.json(
+        { error: 'Conflict: updated by another session' },
+        { status: 409 },
       );
-      if ('notFound' in result) {
-        return NextResponse.json({ error: 'Sentence not found' }, { status: 404 });
-      }
-      if ('conflict' in result) {
-        return NextResponse.json(
-          { error: 'Conflict: updated by another session' },
-          { status: 409 },
-        );
-      }
-      finalSrs = result.srs;
-      finalNextReview = result.nextReviewDate;
-      scriptId = result.scriptId;
     }
 
     // Step 4: Script 集計更新（冪等）
-    if (scriptId) {
+    if (result.scriptId) {
       const [{ done, total, minNextReview, hasUnscheduled }, currentScriptStatus] =
         await Promise.all([
-          countSentencesForScript(scriptId),
-          fetchScriptStatus(scriptId),
+          countSentencesForScript(result.scriptId),
+          fetchScriptStatus(result.scriptId),
         ]);
       await updateScriptAfterReview(
-        scriptId, reviewedAt, done, total, currentScriptStatus,
+        result.scriptId, reviewedAt, done, total, currentScriptStatus,
         payload.result, minNextReview, hasUnscheduled,
       );
     }
 
     // Step 5: Review Log 作成
-    await writeReviewLog(payload, reviewedAt, previousInterval, finalSrs.nextIntervalDays);
+    await writeReviewLog(payload, reviewedAt, previousInterval, result.srs.nextIntervalDays);
 
     return NextResponse.json({
       ok: true,
-      nextReview: finalNextReview,
-      newStatus: finalSrs.newStatus,
-      newInterval: finalSrs.nextIntervalDays,
+      nextReview: result.nextReviewDate,
+      newStatus: result.srs.newStatus,
+      newInterval: result.srs.nextIntervalDays,
     });
   } catch (error) {
     console.error('[sentence-study] Notion update error:', error);

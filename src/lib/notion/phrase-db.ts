@@ -116,8 +116,9 @@ export interface PhraseSrsState {
   reviewCount: number;
   forgottenCount: number;
   status: 'New' | 'Reviewing' | 'Mastered';
-  syncVersion: string;   // I-4: 最後に適用した logEntry（sessionId:itemId）
-  stateVersion: string;  // I-5: Notion page.last_edited_time
+  nextReview: string | null;  // F-2: 再送時に保存済み値をそのまま返す
+  syncVersion: string;        // I-4: 最後に適用した logEntry（sessionId:itemId）
+  stateVersion: string;       // I-5: Notion page.last_edited_time
 }
 
 export async function fetchPhraseSrsState(phraseId: string): Promise<PhraseSrsState | null> {
@@ -134,6 +135,7 @@ export async function fetchPhraseSrsState(phraseId: string): Promise<PhraseSrsSt
       reviewCount: extractNumber(p[PHRASE_PROPS.REVIEW_COUNT]),
       forgottenCount: extractNumber(p[PHRASE_PROPS.FORGOTTEN_COUNT]),
       status: extractStatus(p[PHRASE_PROPS.STATUS]),
+      nextReview: extractDate(p[PHRASE_PROPS.NEXT_REVIEW]),
       syncVersion: extractText(p[PHRASE_PROPS.SYNC_VERSION]),
       stateVersion: page.last_edited_time,
     };

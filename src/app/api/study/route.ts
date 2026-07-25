@@ -92,40 +92,43 @@ export async function POST(req: NextRequest) {
     }
 
     const reviewedAt = resolveReviewedAt(payload.reviewedAt);
-    const previousInterval = state.intervalDays;
-    let finalSrs: SRSResult | null = null;
-    let finalNextReview: string | null = null;
 
+    // F-2: SRS適用済みの再送分岐 — 保存済み値をそのまま使い、再計算しない
     if (state.syncVersion === logEntry) {
-      // SRS更新は適用済み — ログだけ追記
-      finalSrs = calculateNextInterval(payload.result, state.intervalDays, state.correctStreak);
-      finalNextReview = addDaysJST(new Date(), finalSrs.nextIntervalDays);
-    } else {
-      // Step 3: SRS更新 + I-5 楽観ロック
-      const result = await applySrsWithOptimisticLock(
-        payload.itemId, payload.result, logEntry, reviewedAt,
-      );
-      if ('notFound' in result) {
-        return NextResponse.json({ error: 'Phrase not found' }, { status: 404 });
-      }
-      if ('conflict' in result) {
-        return NextResponse.json(
-          { error: 'Conflict: updated by another session' },
-          { status: 409 },
-        );
-      }
-      finalSrs = result.srs;
-      finalNextReview = result.nextReviewDate;
+      await writeReviewLog(payload, reviewedAt, undefined, state.intervalDays);
+      return NextResponse.json({
+        ok: true,
+        replayed: true,
+        nextReview: state.nextReview,
+        newStatus: state.status,
+        newInterval: state.intervalDays,
+      });
     }
 
-    // Step 4: Review Log 作成（既存の冪等チェック維持）
-    await writeReviewLog(payload, reviewedAt, previousInterval, finalSrs.nextIntervalDays);
+    const previousInterval = state.intervalDays;
+
+    // Step 3: SRS更新 + I-5 楽観ロック
+    const result = await applySrsWithOptimisticLock(
+      payload.itemId, payload.result, logEntry, reviewedAt,
+    );
+    if ('notFound' in result) {
+      return NextResponse.json({ error: 'Phrase not found' }, { status: 404 });
+    }
+    if ('conflict' in result) {
+      return NextResponse.json(
+        { error: 'Conflict: updated by another session' },
+        { status: 409 },
+      );
+    }
+
+    // Step 4: Review Log 作成
+    await writeReviewLog(payload, reviewedAt, previousInterval, result.srs.nextIntervalDays);
 
     return NextResponse.json({
       ok: true,
-      nextReview: finalNextReview,
-      newStatus: finalSrs.newStatus,
-      newInterval: finalSrs.nextIntervalDays,
+      nextReview: result.nextReviewDate,
+      newStatus: result.srs.newStatus,
+      newInterval: result.srs.nextIntervalDays,
     });
   } catch (error) {
     console.error('[study] Notion update error:', error);

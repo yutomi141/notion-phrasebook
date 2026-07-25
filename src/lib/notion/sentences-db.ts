@@ -165,9 +165,10 @@ export interface SentenceSrsState {
   reviewCount: number;
   forgottenCount: number;
   status: 'Not started' | 'In progress' | 'Done';
+  nextReview: string | null;  // F-2: 再送時に保存済み値をそのまま返す
   scriptId: string;
-  syncVersion: string;   // I-4: 最後に適用した logEntry（sessionId:itemId）
-  stateVersion: string;  // I-5: Notion page.last_edited_time
+  syncVersion: string;        // I-4: 最後に適用した logEntry（sessionId:itemId）
+  stateVersion: string;       // I-5: Notion page.last_edited_time
 }
 
 export async function fetchSentenceSrsState(sentenceId: string): Promise<SentenceSrsState | null> {
@@ -184,6 +185,7 @@ export async function fetchSentenceSrsState(sentenceId: string): Promise<Sentenc
       reviewCount: extractNumber(p[SENTENCE_PROPS.REVIEW_COUNT]),
       forgottenCount: extractNumber(p[SENTENCE_PROPS.FORGOTTEN_COUNT]),
       status: extractSentenceStatus(p[SENTENCE_PROPS.STATUS]),
+      nextReview: extractDate(p[SENTENCE_PROPS.NEXT_REVIEW]),
       scriptId: extractRelationId(p[SENTENCE_PROPS.SCRIPT]),
       syncVersion: p[SENTENCE_PROPS.SYNC_VERSION] ? extractText(p[SENTENCE_PROPS.SYNC_VERSION]) : '',
       stateVersion: page.last_edited_time,

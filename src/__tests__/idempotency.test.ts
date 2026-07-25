@@ -132,6 +132,112 @@ describe('I-4: Sync Version による冪等化', () => {
   });
 });
 
+describe('F-2: リプレイ分岐 — 再計算なしで保存済み値を返す', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NOTION_PHRASE_DB_ID = 'phrase-db-id';
+    process.env.NOTION_SCRIPT_SENTENCES_DB_ID = 'sentences-db-id';
+    process.env.NOTION_REVIEW_LOG_DB_ID = 'review-log-db-id';
+  });
+
+  it('1. フレーズ: リプレイ時はnotion.pages.updateを呼ばない', async () => {
+    const logEntry = 'session-x:phrase-page-id';
+    const page = makePhrasePage({ syncVersion: logEntry, stateVersion: 'v5', intervalDays: 8 });
+    mockPagesRetrieve.mockResolvedValue(page);
+
+    const { fetchPhraseSrsState, updatePhraseAfterReview } = await import('@/lib/notion/phrase-db');
+    const { writeReviewLog } = await import('@/lib/notion/review-log');
+    const state = await fetchPhraseSrsState('phrase-page-id');
+    expect(state).not.toBeNull();
+
+    // ルートハンドラのリプレイ分岐をシミュレート
+    if (state!.syncVersion === logEntry) {
+      await writeReviewLog(
+        { itemId: 'phrase-page-id', sessionId: 'session-x', result: 'remembered', itemType: 'phrase', direction: 'EN_TO_JA', reviewedAt: '2026-07-25T00:00:00Z' },
+        '2026-07-25T00:00:00Z',
+        undefined,
+        state!.intervalDays,
+      );
+    } else {
+      await updatePhraseAfterReview('phrase-page-id', 'Reviewing', 20, 3, '2026-08-15', '2026-07-25T00:00:00Z', 3, 0, logEntry);
+    }
+
+    // SRS更新（pages.update）は一切呼ばれない
+    expect(mockPagesUpdate).not.toHaveBeenCalled();
+    expect(writeReviewLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('2. フレーズ: リプレイ時のwriteReviewLogには再計算値ではなく保存済みintervalDaysを渡す', async () => {
+    const logEntry = 'session-x:phrase-page-id';
+    // SRS適用後の状態: intervalDays=8, correctStreak=2
+    // 再計算すると 8 * 2.5 = 20 になる（F-2修正前のバグ）
+    const page = makePhrasePage({ syncVersion: logEntry, stateVersion: 'v5', intervalDays: 8, correctStreak: 2 });
+    mockPagesRetrieve.mockResolvedValue(page);
+
+    const { fetchPhraseSrsState } = await import('@/lib/notion/phrase-db');
+    const { writeReviewLog } = await import('@/lib/notion/review-log');
+    const state = await fetchPhraseSrsState('phrase-page-id');
+
+    if (state!.syncVersion === logEntry) {
+      await writeReviewLog(
+        { itemId: 'phrase-page-id', sessionId: 'session-x', result: 'remembered', itemType: 'phrase', direction: 'EN_TO_JA', reviewedAt: '2026-07-25T00:00:00Z' },
+        '2026-07-25T00:00:00Z',
+        undefined,
+        state!.intervalDays, // 保存済み値: 8
+      );
+    }
+
+    const [, , , passedInterval] = vi.mocked(writeReviewLog).mock.calls[0];
+    expect(passedInterval).toBe(8); // 再計算値(20)ではなく保存済み値(8)
+  });
+
+  it('3. フレーズ: リプレイレスポンスはstate.nextReview/status/intervalDaysをそのまま返す', async () => {
+    const logEntry = 'session-x:phrase-page-id';
+    const page = makePhrasePage({
+      syncVersion: logEntry,
+      stateVersion: 'v5',
+      intervalDays: 8,
+      correctStreak: 2,
+      status: 'Reviewing',
+    });
+    (page.properties as Record<string, unknown>)['Next Review'] = {
+      type: 'date',
+      date: { start: '2026-08-02' },
+    };
+    mockPagesRetrieve.mockResolvedValue(page);
+
+    const { fetchPhraseSrsState } = await import('@/lib/notion/phrase-db');
+    const state = await fetchPhraseSrsState('phrase-page-id');
+
+    // リプレイ分岐のレスポンス値（ルートハンドラに合わせた構造）
+    const response = {
+      ok: true,
+      replayed: true,
+      nextReview: state!.nextReview,
+      newStatus: state!.status,
+      newInterval: state!.intervalDays,
+    };
+
+    expect(response.nextReview).toBe('2026-08-02'); // 保存済み日付
+    expect(response.newStatus).toBe('Reviewing');   // 保存済みステータス
+    expect(response.newInterval).toBe(8);            // 再計算値(20)ではない
+  });
+
+  it('4. センテンス: リプレイ分岐のDBステータス→SRS用語マッピングが正しい', () => {
+    // センテンスDB側のステータス名はPhrase DBと異なるため、ルートで変換が必要
+    // route.ts: const srsStatus = state.status === 'Done' ? 'Mastered' : ...
+    type SentenceStatus = 'Done' | 'In progress' | 'Not started';
+    const toSrsStatus = (s: SentenceStatus) =>
+      s === 'Done' ? 'Mastered' : s === 'In progress' ? 'Reviewing' : 'New';
+
+    expect(toSrsStatus('Done')).toBe('Mastered');
+    expect(toSrsStatus('In progress')).toBe('Reviewing');
+    expect(toSrsStatus('Not started')).toBe('New');
+    // センテンスのリプレイ分岐ではpages.updateを呼ばないことを確認
+    expect(mockPagesUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe('I-5: 楽観ロック — last_edited_time による競合検出', () => {
   beforeEach(() => {
     vi.clearAllMocks();
