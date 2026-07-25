@@ -1,6 +1,8 @@
 'use client';
 
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { enqueue, isQueueAvailable } from '@/lib/offline/queue';
+import { flush } from '@/lib/offline/flush';
 import type { ScriptCard, SentenceCard, ReviewPayload, StudyDirection } from '@/types';
 
 async function fetchScripts(): Promise<ScriptCard[]> {
@@ -25,13 +27,36 @@ async function fetchDueSentences(): Promise<SentenceCard[]> {
 }
 
 async function submitSentenceReview(payload: ReviewPayload) {
-  const res = await fetch('/api/sentence-study', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payload }),
-  });
-  if (!res.ok) throw new Error('復習記録の保存に失敗しました');
-  return res.json();
+  let res: Response;
+  try {
+    res = await fetch('/api/sentence-study', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload }),
+    });
+  } catch {
+    if (isQueueAvailable()) {
+      await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/sentence-study' });
+      return { ok: true, queued: true };
+    }
+    throw new Error('復習記録の保存に失敗しました');
+  }
+
+  if (res.ok) {
+    flush().catch(() => undefined);
+    return res.json();
+  }
+
+  if (res.status >= 400 && res.status < 500) {
+    throw new Error(`復習記録の保存に失敗しました (${res.status})`);
+  }
+
+  if (isQueueAvailable()) {
+    await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/sentence-study' });
+    return { ok: true, queued: true };
+  }
+
+  throw new Error('復習記録の保存に失敗しました');
 }
 
 export function useScripts() {

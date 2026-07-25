@@ -1,6 +1,8 @@
 'use client';
 
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { enqueue, queueCount, isQueueAvailable } from '@/lib/offline/queue';
+import { flush } from '@/lib/offline/flush';
 import type { PhraseCard, ReviewPayload, StudyDirection } from '@/types';
 
 async function fetchCards(): Promise<PhraseCard[]> {
@@ -11,13 +13,39 @@ async function fetchCards(): Promise<PhraseCard[]> {
 }
 
 async function submitReview(payload: ReviewPayload) {
-  const res = await fetch('/api/study', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payload }),
-  });
-  if (!res.ok) throw new Error('復習記録の保存に失敗しました');
-  return res.json();
+  let res: Response;
+  try {
+    res = await fetch('/api/study', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload }),
+    });
+  } catch {
+    // ネットワークエラー → キューへ
+    if (isQueueAvailable()) {
+      await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
+      return { ok: true, queued: true };
+    }
+    throw new Error('復習記録の保存に失敗しました');
+  }
+
+  if (res.ok) {
+    flush().catch(() => undefined);
+    return res.json();
+  }
+
+  // 4xx: バリデーションエラー・競合等 → キューに入れない
+  if (res.status >= 400 && res.status < 500) {
+    throw new Error(`復習記録の保存に失敗しました (${res.status})`);
+  }
+
+  // 5xx → キューへ
+  if (isQueueAvailable()) {
+    await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
+    return { ok: true, queued: true };
+  }
+
+  throw new Error('復習記録の保存に失敗しました');
 }
 
 export function useStudyCards() {
@@ -30,6 +58,14 @@ export function useStudyCards() {
 export function useSubmitReview() {
   return useMutation({
     mutationFn: ({ payload }: { payload: ReviewPayload }) => submitReview(payload),
+  });
+}
+
+export function useQueueCount() {
+  return useQuery({
+    queryKey: ['queue-count'],
+    queryFn: () => (isQueueAvailable() ? queueCount() : Promise.resolve(0)),
+    refetchInterval: 10_000,
   });
 }
 
