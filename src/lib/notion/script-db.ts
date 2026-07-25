@@ -93,8 +93,9 @@ export async function fetchScriptStatus(
 /**
  * スクリプトのステータス・最終復習日・次回復習日・文数を更新する。
  *
- * - minNextReview: 全センテンスの Next Review 最小値（null なら全文未設定 or allDone）
- * - allDone のとき Next Review を明示的に null へクリアする
+ * - minNextReview: 全センテンス（Done含む）の Next Review 最小値
+ * - hasUnscheduled: Done以外で Next Review 未設定の文が存在する
+ * - Perfect（全文Done）でも Done文に将来の Next Review があれば保持する
  */
 export async function updateScriptAfterReview(
   scriptId: string,
@@ -119,12 +120,10 @@ export async function updateScriptAfterReview(
     newStatus = 'Perfect';
   }
 
-  // allDone → null クリア
   // 未学習文あり → 今日のJST日付（今すぐ学習可能）
-  // それ以外 → 全Sentenceの最小 Next Review
-  const nextReviewProp: { date: { start: string } | null } = allDone
-    ? { date: null }
-    : hasUnscheduled
+  // Done含む全Sentenceの最小 Next Review があれば設定
+  // 全件 Next Review が null → null（全文学習完了かつ次回予定なし）
+  const nextReviewProp: { date: { start: string } | null } = hasUnscheduled
     ? { date: { start: todayJST() } }
     : minNextReview
     ? { date: { start: minNextReview } }

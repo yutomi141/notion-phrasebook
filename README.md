@@ -30,7 +30,7 @@
 
 ### 前提条件
 
-- Node.js 20以上
+- Node.js 20 LTS / npm 10
 - Notionインテグレーションが作成済みで、Phrase DB・Script Library・Script Sentences DB・Review Log DBへのアクセス権がある
 - Googleアカウント（OAuth認証用）
 
@@ -42,7 +42,7 @@ git clone <repository-url>
 cd notion-phrasebook
 
 # 2. 依存パッケージをインストール
-npm install
+npm ci
 
 # 3. 環境変数を設定
 cp .env.example .env
@@ -56,17 +56,22 @@ npm run dev
 
 ### 環境変数
 
-| 変数 | 説明 |
-|---|---|
-| `NOTION_TOKEN` | Notionインテグレーショントークン |
-| `NOTION_PHRASE_DB_ID` | Phrase DBのID |
-| `NOTION_SCRIPT_LIBRARY_DB_ID` | Script LibraryのID |
-| `NOTION_SCRIPT_SENTENCES_DB_ID` | Script Sentences DBのID |
-| `NOTION_REVIEW_LOG_DB_ID` | Review Log DBのID |
-| `AUTH_SECRET` | `openssl rand -base64 32` で生成 |
-| `AUTH_ALLOWED_EMAIL` | アクセスを許可するGmailアドレス |
-| `AUTH_GOOGLE_ID` | Google OAuth クライアントID |
-| `AUTH_GOOGLE_SECRET` | Google OAuth クライアントシークレット |
+`.env.example` をコピーして値を設定する。
+
+| 変数 | 必須 | 説明 |
+|---|---|---|
+| `NOTION_TOKEN` | ✅ | Notionインテグレーショントークン |
+| `NOTION_PHRASE_DB_ID` | ✅ | Phrase DBのID |
+| `NOTION_SCRIPT_LIBRARY_DB_ID` | ✅ | Script LibraryのID |
+| `NOTION_SCRIPT_SENTENCES_DB_ID` | ✅ | Script Sentences DBのID |
+| `NOTION_REVIEW_LOG_DB_ID` | ✅ | Review Log DBのID |
+| `AUTH_SECRET` | ✅ | `openssl rand -base64 32` で生成 |
+| `AUTH_ALLOWED_EMAIL` | ✅ | アクセスを許可するGmailアドレス |
+| `AUTH_GOOGLE_ID` | ✅ | Google OAuth クライアントID |
+| `AUTH_GOOGLE_SECRET` | ✅ | Google OAuth クライアントシークレット |
+| `NEXTAUTH_URL` | ✅ | 本番URL（ローカルは `http://localhost:3000`） |
+| `SRS_*` | — | 間隔反復アルゴリズム設定（省略時はデフォルト値） |
+| `NOTION_REQUIREMENTS_PAGE_ID` | — | Claude Code開発時のみ使用（アプリ本体は参照しない） |
 
 ## コマンド
 

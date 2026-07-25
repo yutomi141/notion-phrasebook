@@ -33,7 +33,7 @@ describe('aggregateSentences — N-3 Script Next Review 集計', () => {
     expect(result.hasUnscheduled).toBe(true);
   });
 
-  it('全文 Done + 日付あり → done===total, hasUnscheduled=false', () => {
+  it('全文 Done + 日付あり → done===total, hasUnscheduled=false, minNextReview は最小日付', () => {
     const result = aggregateSentences([
       { status: 'Done', nextReview: TOMORROW },
       { status: 'Done', nextReview: IN_7_DAYS },
@@ -41,7 +41,6 @@ describe('aggregateSentences — N-3 Script Next Review 集計', () => {
     expect(result.done).toBe(2);
     expect(result.total).toBe(2);
     expect(result.hasUnscheduled).toBe(false);
-    // minNextReview は集計される（script-db 側で allDone 判定後に null クリアする）
     expect(result.minNextReview).toBe(TOMORROW);
   });
 
@@ -83,5 +82,57 @@ describe('aggregateSentences — N-3 Script Next Review 集計', () => {
     const copy = JSON.stringify(inputs);
     aggregateSentences(inputs);
     expect(JSON.stringify(inputs)).toBe(copy);
+  });
+});
+
+describe('aggregateSentences — 全文Done時のNext Review保持', () => {
+  it('Done=明日、In progress=7日後 → minNextReview は明日（script-dbがそのまま設定）', () => {
+    const result = aggregateSentences([
+      { status: 'Done', nextReview: TOMORROW },
+      { status: 'In progress', nextReview: IN_7_DAYS },
+    ]);
+    expect(result.minNextReview).toBe(TOMORROW);
+    expect(result.hasUnscheduled).toBe(false);
+  });
+
+  it('全文Done・Next Reviewが明日と7日後 → minNextReview は明日', () => {
+    const result = aggregateSentences([
+      { status: 'Done', nextReview: TOMORROW },
+      { status: 'Done', nextReview: IN_7_DAYS },
+    ]);
+    expect(result.minNextReview).toBe(TOMORROW);
+    expect(result.hasUnscheduled).toBe(false);
+    expect(result.done).toBe(2);
+  });
+
+  it('全文Done・全Next Reviewがnull → minNextReview は null', () => {
+    const result = aggregateSentences([
+      { status: 'Done', nextReview: null },
+      { status: 'Done', nextReview: null },
+    ]);
+    expect(result.minNextReview).toBeNull();
+    expect(result.hasUnscheduled).toBe(false);
+    expect(result.done).toBe(2);
+  });
+
+  it('Not started（Next Reviewなし）＋Done（明日） → hasUnscheduled=true で未学習優先', () => {
+    const result = aggregateSentences([
+      { status: 'Not started', nextReview: null },
+      { status: 'Done', nextReview: TOMORROW },
+    ]);
+    expect(result.hasUnscheduled).toBe(true);
+    expect(result.minNextReview).toBe(TOMORROW);
+  });
+
+  it('全文DoneでもhasUnscheduled=falseなのでscript-db側がPerfect判定できる', () => {
+    const result = aggregateSentences([
+      { status: 'Done', nextReview: TOMORROW },
+      { status: 'Done', nextReview: IN_7_DAYS },
+    ]);
+    const allDone = result.done === result.total;
+    expect(allDone).toBe(true);
+    expect(result.hasUnscheduled).toBe(false);
+    // hasUnscheduled=false, minNextReview=TOMORROW → script-db は TOMORROW を設定
+    expect(result.minNextReview).toBe(TOMORROW);
   });
 });
