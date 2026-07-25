@@ -28,7 +28,7 @@ async function fetchDueSentences(): Promise<SentenceCard[]> {
 
 async function submitSentenceReview(payload: ReviewPayload) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
   let res: Response;
   try {

@@ -52,6 +52,7 @@ export const idbAdapter: StorageAdapter = {
         store.put(full);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
       };
       getReq.onerror = () => reject(getReq.error);
     });
