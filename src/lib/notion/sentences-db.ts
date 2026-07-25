@@ -3,7 +3,8 @@ import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoint
 import { notion } from './client';
 import { NOTION_DB, SENTENCE_PROPS, SENTENCE_STATUS } from '@/lib/schema/notion-ids';
 import { todayJST } from '@/lib/date';
-import { parseBlock, normalizeForDedup, nextOrderAfter } from './script-parser';
+import { parseBlock, normalizeForDedup, nextOrderAfter, planSync } from './script-parser';
+import type { ParsedEntry, DBEntry } from './script-parser';
 import { aggregateSentences } from './sentence-agg';
 import type { SentenceAggInput } from './sentence-agg';
 import type { SentenceCard } from '@/types';
@@ -195,6 +196,9 @@ export async function fetchSentenceSrsState(sentenceId: string): Promise<Sentenc
 
 export interface SyncResult {
   created: number;
+  updated: number;
+  archived: number;
+  reordered: number;
   unchanged: number;
   total: number;
 }
@@ -205,10 +209,13 @@ const SKIP_BLOCK_TYPES = new Set([
 
 /**
  * Script Library ページのブロック本文を Script Sentences DB へ同期する。
- * "英文 (日本語訳)" 形式を解析して Sentence/Meaning を分離し、
- * 英文を正規化して既存エントリと照合する（学習履歴は保持）。
+ * 追加・Meaning更新・アーカイブ・並べ替えに対応する差分同期。
+ * force=true の場合のみ 30% 超のアーカイブを許可する。
  */
-export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncResult> {
+export async function syncSentencesFromBlocks(
+  scriptId: string,
+  force = false,
+): Promise<SyncResult | { tooManyArchives: true; archiveRatio: number; wouldArchive: Array<{ id: string; sentence: string }> }> {
   type RichTextItem = { plain_text: string };
   type Block = {
     type: string;
@@ -218,7 +225,7 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
     quote?: { rich_text: RichTextItem[] };
   };
 
-  const parsedBlocks: Array<{ sentence: string; meaning: string }> = [];
+  const parsedBlocks: ParsedEntry[] = [];
   let blockCursor: string | undefined;
 
   do {
@@ -248,26 +255,27 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
     blockCursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
   } while (blockCursor);
 
-  if (parsedBlocks.length === 0) return { created: 0, unchanged: 0, total: 0 };
+  if (parsedBlocks.length === 0) {
+    return { created: 0, updated: 0, archived: 0, reordered: 0, unchanged: 0, total: 0 };
+  }
 
-  // 既存 Sentence を正規化キーで索引（重複チェック用）
-  const existing = await fetchSentencesByScript(scriptId);
-  const existingNormalized = new Map<string, true>(
-    existing.map((s) => [normalizeForDedup(s.sentence), true]),
-  );
+  const existingSentences = await fetchSentencesByScript(scriptId);
+  const existing: DBEntry[] = existingSentences.map((s) => ({
+    id: s.id,
+    sentence: s.sentence,
+    meaning: s.meaning,
+    order: s.order,
+  }));
 
-  let created = 0;
-  let unchanged = 0;
-  // F-2: 既存 Order の最大値 + 1 から開始（length ベースだと既存に gap があると重複する）
+  const { plan, tooManyArchives, archiveRatio } = planSync(parsedBlocks, existing);
+
+  if (tooManyArchives && !force) {
+    return { tooManyArchives: true, archiveRatio, wouldArchive: plan.toArchive };
+  }
+
+  // 作成
   let nextOrder = nextOrderAfter(existing.map((s) => s.order));
-
-  for (const { sentence, meaning } of parsedBlocks) {
-    const key = normalizeForDedup(sentence);
-    if (existingNormalized.has(key)) {
-      unchanged++;
-      continue;
-    }
-
+  for (const { sentence, meaning } of plan.toCreate) {
     await notion.pages.create({
       parent: { database_id: NOTION_DB.SCRIPT_SENTENCES },
       properties: {
@@ -282,14 +290,45 @@ export async function syncSentencesFromBlocks(scriptId: string): Promise<SyncRes
         [SENTENCE_PROPS.FORGOTTEN_COUNT]: { number: 0 },
       },
     });
-
-    existingNormalized.set(key, true);
     nextOrder++;
-    created++;
   }
 
-  return { created, unchanged, total: existing.length + created };
+  // Meaning 更新（SRS履歴は保持）
+  for (const { id, meaning } of plan.toUpdate) {
+    await notion.pages.update({
+      page_id: id,
+      properties: {
+        [SENTENCE_PROPS.MEANING]: { rich_text: [{ text: { content: meaning } }] },
+      },
+    });
+  }
+
+  // アーカイブ（削除ではなく可逆な非公開化）
+  for (const { id } of plan.toArchive) {
+    await notion.pages.update({ page_id: id, archived: true });
+  }
+
+  // Order 並べ替え
+  for (const { id, newOrder } of plan.toReorder) {
+    await notion.pages.update({
+      page_id: id,
+      properties: { [SENTENCE_PROPS.ORDER]: { number: newOrder } },
+    });
+  }
+
+  const activeTotal = existing.length + plan.toCreate.length - plan.toArchive.length;
+  return {
+    created: plan.toCreate.length,
+    updated: plan.toUpdate.length,
+    archived: plan.toArchive.length,
+    reordered: plan.toReorder.length,
+    unchanged: plan.unchanged,
+    total: activeTotal,
+  };
 }
+
+// normalizeForDedup は script-parser から re-export が必要な箇所向け
+export { normalizeForDedup };
 
 export async function updateSentenceAfterReview(
   sentenceId: string,

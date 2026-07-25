@@ -6,7 +6,7 @@ import { NOTION_DB, SCRIPT_PROPS } from '@/lib/schema/notion-ids';
 import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints';
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -15,6 +15,12 @@ export async function POST(
   }
 
   const { id } = await params;
+
+  let force = false;
+  try {
+    const body = await req.json().catch(() => ({}));
+    force = body?.force === true;
+  } catch { /* force remains false */ }
 
   try {
     // Script Library DB への所属確認
@@ -26,10 +32,22 @@ export async function POST(
       return NextResponse.json({ error: 'Script not found' }, { status: 404 });
     }
 
-    const result = await syncSentencesFromBlocks(id);
+    const result = await syncSentencesFromBlocks(id, force);
+
+    if ('tooManyArchives' in result) {
+      return NextResponse.json(
+        {
+          error: 'Too many archives',
+          archiveRatio: result.archiveRatio,
+          wouldArchive: result.wouldArchive,
+          hint: 'Pass { force: true } to override the 30% safety limit',
+        },
+        { status: 409 },
+      );
+    }
 
     // Sentence Count を更新
-    if (result.total > 0) {
+    if (result.total >= 0) {
       await notion.pages.update({
         page_id: id,
         properties: {

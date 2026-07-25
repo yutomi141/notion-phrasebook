@@ -77,3 +77,90 @@ export function normalizeForDedup(text: string): string {
 export function nextOrderAfter(existingOrders: number[]): number {
   return Math.max(0, ...existingOrders) + 1;
 }
+
+export interface ParsedEntry {
+  sentence: string;
+  meaning: string;
+}
+
+export interface DBEntry {
+  id: string;
+  sentence: string;
+  meaning: string;
+  order: number;
+}
+
+export interface SyncPlan {
+  toCreate: ParsedEntry[];
+  toUpdate: Array<{ id: string; meaning: string }>;
+  toArchive: Array<{ id: string; sentence: string }>;
+  toReorder: Array<{ id: string; newOrder: number }>;
+  unchanged: number;
+}
+
+const ARCHIVE_THRESHOLD = 0.3;
+
+/**
+ * 本文パース結果とDB既存データを突き合わせてDiffを計算する純粋関数。
+ * Notion呼び出しを含まないため、テストとdry-runに使用できる。
+ */
+export function planSync(
+  parsed: ParsedEntry[],
+  existing: DBEntry[],
+): { plan: SyncPlan; tooManyArchives: boolean; archiveRatio: number } {
+  // 本文の出現順で正規化キー → ParsedEntry のマップ
+  const parsedByKey = new Map<string, { entry: ParsedEntry; parsedIndex: number }>();
+  for (let i = 0; i < parsed.length; i++) {
+    const key = normalizeForDedup(parsed[i].sentence);
+    if (!parsedByKey.has(key)) {
+      parsedByKey.set(key, { entry: parsed[i], parsedIndex: i });
+    }
+  }
+
+  // 既存DBを正規化キー → DBEntry のマップ
+  const existingByKey = new Map<string, DBEntry>();
+  for (const e of existing) {
+    existingByKey.set(normalizeForDedup(e.sentence), e);
+  }
+
+  const plan: SyncPlan = {
+    toCreate: [],
+    toUpdate: [],
+    toArchive: [],
+    toReorder: [],
+    unchanged: 0,
+  };
+
+  // 本文側を走査
+  for (const [key, { entry, parsedIndex }] of parsedByKey.entries()) {
+    const dbEntry = existingByKey.get(key);
+    if (!dbEntry) {
+      plan.toCreate.push(entry);
+    } else {
+      // Meaning の変化チェック
+      if (entry.meaning !== dbEntry.meaning) {
+        plan.toUpdate.push({ id: dbEntry.id, meaning: entry.meaning });
+      }
+      // Order の変化チェック（本文順は 1-based）
+      const expectedOrder = parsedIndex + 1;
+      if (dbEntry.order !== expectedOrder) {
+        plan.toReorder.push({ id: dbEntry.id, newOrder: expectedOrder });
+      }
+      if (entry.meaning === dbEntry.meaning && dbEntry.order === parsedIndex + 1) {
+        plan.unchanged++;
+      }
+    }
+  }
+
+  // DBにあり本文にない → アーカイブ候補
+  for (const [key, dbEntry] of existingByKey.entries()) {
+    if (!parsedByKey.has(key)) {
+      plan.toArchive.push({ id: dbEntry.id, sentence: dbEntry.sentence });
+    }
+  }
+
+  const archiveRatio = existing.length > 0 ? plan.toArchive.length / existing.length : 0;
+  const tooManyArchives = archiveRatio > ARCHIVE_THRESHOLD;
+
+  return { plan, tooManyArchives, archiveRatio };
+}
