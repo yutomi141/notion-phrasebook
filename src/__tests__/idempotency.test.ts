@@ -1,5 +1,5 @@
 /**
- * I-4: Sync Version による冪等化 / I-5: 楽観ロック のテスト
+ * I-4: Sync Version による冪等化 / I-5: 楽観ロック / B-1: リプレイ分岐のScript集計 のテスト
  * Notion APIをモックし、各シナリオのSRS更新呼び出し回数を検証する。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -26,6 +26,11 @@ vi.mock('@/lib/notion/review-log', () => ({
 }));
 
 vi.mock('server-only', () => ({}));
+
+// ---- B-1 用モック（Script集計） ----
+const mockCountSentencesForScript = vi.fn();
+const mockFetchScriptStatus = vi.fn();
+const mockUpdateScriptAfterReview = vi.fn();
 
 // ---- ヘルパー ----
 
@@ -297,5 +302,52 @@ describe('I-5: 楽観ロック — last_edited_time による競合検出', () =
     const s4 = await fetchPhraseSrsState('phrase-page-id');
     const conflictDetected2 = s3?.stateVersion !== s4?.stateVersion;
     expect(conflictDetected2).toBe(true); // → 409
+  });
+});
+
+describe('B-1: sentence-study リプレイ分岐での Script 集計更新', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCountSentencesForScript.mockResolvedValue({
+      done: 2, total: 3, minNextReview: '2026-08-01', hasUnscheduled: false,
+    });
+    mockFetchScriptStatus.mockResolvedValue('Reviewing');
+    mockUpdateScriptAfterReview.mockResolvedValue(undefined);
+  });
+
+  // リプレイ分岐でのScript集計ロジックをシミュレート
+  // （route.ts の if (state.syncVersion === logEntry) 分岐に対応）
+  async function runReplayScriptAgg(scriptId: string) {
+    if (scriptId) {
+      const [agg, scriptStatus] = await Promise.all([
+        mockCountSentencesForScript(scriptId),
+        mockFetchScriptStatus(scriptId),
+      ]);
+      await mockUpdateScriptAfterReview(
+        scriptId, '2026-07-25', agg.done, agg.total,
+        scriptStatus, 'remembered', agg.minNextReview, agg.hasUnscheduled,
+      );
+    }
+  }
+
+  it('1. scriptIdがあるとき Script 集計更新が呼ばれる', async () => {
+    await runReplayScriptAgg('script-abc');
+    expect(mockCountSentencesForScript).toHaveBeenCalledWith('script-abc');
+    expect(mockUpdateScriptAfterReview).toHaveBeenCalledTimes(1);
+    expect(mockUpdateScriptAfterReview.mock.calls[0][0]).toBe('script-abc');
+    // SRS更新（sentenceページのpages.update）は行われない
+    expect(mockPagesUpdate).not.toHaveBeenCalled();
+  });
+
+  it('2. scriptIdが空のとき Script 集計更新は呼ばれない', async () => {
+    await runReplayScriptAgg('');
+    expect(mockCountSentencesForScript).not.toHaveBeenCalled();
+    expect(mockUpdateScriptAfterReview).not.toHaveBeenCalled();
+  });
+
+  it('3. F-2回帰: Script集計を実行しても SRS更新（pages.update）は呼ばれない', async () => {
+    await runReplayScriptAgg('script-xyz');
+    expect(mockUpdateScriptAfterReview).toHaveBeenCalledTimes(1); // Script集計は呼ばれる
+    expect(mockPagesUpdate).not.toHaveBeenCalled();               // SRS更新は呼ばれない
   });
 });

@@ -115,6 +115,19 @@ export async function POST(req: NextRequest) {
     if (state.syncVersion === logEntry) {
       const srsStatus =
         state.status === 'Done' ? 'Mastered' : state.status === 'In progress' ? 'Reviewing' : 'New';
+      // B-1: Script集計は冪等なのでリプレイでも実行する
+      // （Step3成功→Step4前クラッシュで再送した場合にScript側が古いまま残るのを防ぐ）
+      if (state.scriptId) {
+        const [{ done, total, minNextReview, hasUnscheduled }, currentScriptStatus] =
+          await Promise.all([
+            countSentencesForScript(state.scriptId),
+            fetchScriptStatus(state.scriptId),
+          ]);
+        await updateScriptAfterReview(
+          state.scriptId, reviewedAt, done, total, currentScriptStatus,
+          payload.result, minNextReview, hasUnscheduled,
+        );
+      }
       await writeReviewLog(payload, reviewedAt, undefined, state.intervalDays);
       return NextResponse.json({
         ok: true,
