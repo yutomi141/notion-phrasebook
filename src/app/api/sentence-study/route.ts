@@ -14,6 +14,7 @@ import { validateReviewPayload } from '@/lib/validation/review-payload';
 import { resolveReviewedAt } from '@/lib/validation/reviewed-at';
 import type { ReviewPayload, SRSResult } from '@/types';
 
+// auth() チェックなし — Next.js Middleware で全パス認証済み（書き込みは POST で再検証）
 export async function GET() {
   try {
     const sentences = await fetchDueSentences();

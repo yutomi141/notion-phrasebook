@@ -121,6 +121,7 @@ export interface PhraseSrsState {
   stateVersion: string;       // I-5: Notion page.last_edited_time
 }
 
+// I-5 注意: last_edited_time は分単位に丸められるため、同一分内の並行更新は競合検出できない
 export async function fetchPhraseSrsState(phraseId: string): Promise<PhraseSrsState | null> {
   try {
     const page = (await notion.pages.retrieve({ page_id: phraseId })) as PageObjectResponse;

@@ -41,6 +41,9 @@ export async function flush(): Promise<void> {
       const result = await sendEntry(entry);
 
       if (result === 'success' || result === 'client-error') {
+        if (result === 'client-error') {
+          console.warn('[offline-queue] discarding entry due to 4xx:', entry.key, entry.endpoint);
+        }
         await remove(entry.key);
       } else {
         // サーバーエラー: 試行回数を増やして中断（順序保持のため後続は送らない）

@@ -91,7 +91,7 @@ export interface DBEntry {
 }
 
 export interface SyncPlan {
-  toCreate: ParsedEntry[];
+  toCreate: Array<ParsedEntry & { order: number }>;
   toUpdate: Array<{ id: string; meaning: string }>;
   toArchive: Array<{ id: string; sentence: string }>;
   toReorder: Array<{ id: string; newOrder: number }>;
@@ -135,7 +135,7 @@ export function planSync(
   for (const [key, { entry, parsedIndex }] of parsedByKey.entries()) {
     const dbEntry = existingByKey.get(key);
     if (!dbEntry) {
-      plan.toCreate.push(entry);
+      plan.toCreate.push({ ...entry, order: parsedIndex + 1 });
     } else {
       // Meaning の変化チェック
       if (entry.meaning !== dbEntry.meaning) {

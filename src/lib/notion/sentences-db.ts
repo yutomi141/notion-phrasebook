@@ -3,7 +3,7 @@ import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoint
 import { notion } from './client';
 import { NOTION_DB, SENTENCE_PROPS, SENTENCE_STATUS } from '@/lib/schema/notion-ids';
 import { todayJST } from '@/lib/date';
-import { parseBlock, normalizeForDedup, nextOrderAfter, planSync } from './script-parser';
+import { parseBlock, normalizeForDedup, planSync } from './script-parser';
 import type { ParsedEntry, DBEntry } from './script-parser';
 import { aggregateSentences } from './sentence-agg';
 import type { SentenceAggInput } from './sentence-agg';
@@ -171,6 +171,7 @@ export interface SentenceSrsState {
   stateVersion: string;       // I-5: Notion page.last_edited_time
 }
 
+// I-5 注意: last_edited_time は分単位に丸められるため、同一分内の並行更新は競合検出できない
 export async function fetchSentenceSrsState(sentenceId: string): Promise<SentenceSrsState | null> {
   try {
     const page = (await notion.pages.retrieve({ page_id: sentenceId })) as PageObjectResponse;
@@ -275,16 +276,15 @@ export async function syncSentencesFromBlocks(
     return { tooManyArchives: true, archiveRatio, wouldArchive: plan.toArchive };
   }
 
-  // 作成
-  let nextOrder = nextOrderAfter(existing.map((s) => s.order));
-  for (const { sentence, meaning } of plan.toCreate) {
+  // 作成（本文内の位置 parsedIndex+1 を Order として割り当て、初回同期で収束させる）
+  for (const { sentence, meaning, order } of plan.toCreate) {
     await notion.pages.create({
       parent: { database_id: NOTION_DB.SCRIPT_SENTENCES },
       properties: {
         [SENTENCE_PROPS.SENTENCE]: { title: [{ text: { content: sentence } }] },
         [SENTENCE_PROPS.MEANING]: { rich_text: [{ text: { content: meaning } }] },
         [SENTENCE_PROPS.SCRIPT]: { relation: [{ id: scriptId }] },
-        [SENTENCE_PROPS.ORDER]: { number: nextOrder },
+        [SENTENCE_PROPS.ORDER]: { number: order },
         [SENTENCE_PROPS.STATUS]: { status: { name: SENTENCE_STATUS.NEW } },
         [SENTENCE_PROPS.INTERVAL_DAYS]: { number: 0 },
         [SENTENCE_PROPS.CORRECT_STREAK]: { number: 0 },
@@ -292,7 +292,6 @@ export async function syncSentencesFromBlocks(
         [SENTENCE_PROPS.FORGOTTEN_COUNT]: { number: 0 },
       },
     });
-    nextOrder++;
   }
 
   // Meaning 更新（SRS履歴は保持）

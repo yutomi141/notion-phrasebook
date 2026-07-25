@@ -85,6 +85,25 @@ describe('I-8: planSync — 差分計算（純粋関数）', () => {
     expect(archiveRatio).toBeGreaterThan(0.3);
   });
 
+  it('R-1: 途中挿入の新規文にparsedIndex+1のOrderが付く（1回の同期で収束）', () => {
+    const existingMid: DBEntry[] = [
+      { id: 'e1', sentence: 'First sentence.', meaning: '最初の文。', order: 1 },
+      { id: 'e2', sentence: 'Third sentence.', meaning: '3番目の文。', order: 2 },
+    ];
+    const parsedMid: ParsedEntry[] = [
+      { sentence: 'First sentence.', meaning: '最初の文。' },   // parsedIndex=0 → order=1
+      { sentence: 'Second sentence.', meaning: '2番目の文。' }, // parsedIndex=1 → order=2（新規）
+      { sentence: 'Third sentence.', meaning: '3番目の文。' },  // parsedIndex=2 → order=3
+    ];
+    const { plan } = planSync(parsedMid, existingMid);
+    expect(plan.toCreate).toHaveLength(1);
+    expect(plan.toCreate[0].sentence).toBe('Second sentence.');
+    expect(plan.toCreate[0].order).toBe(2); // max+1(=3)ではなくparsedIndex+1(=2)
+    // e2 は order=2 → order=3 に並び替え
+    const e2reorder = plan.toReorder.find((r) => r.id === 'e2');
+    expect(e2reorder?.newOrder).toBe(3);
+  });
+
   it('7. スマートアポストロフィ・NBSP等の表記揺れが吸収される', () => {
     const dbSentence = "opponent's balance";
     const blockSentence = 'opponent’s balance'; // RIGHT SINGLE QUOTATION MARK
