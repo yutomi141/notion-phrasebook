@@ -106,7 +106,7 @@ POST /api/scripts/{id}/sync
 
 - `docs/implementation-plan.md` — 技術構成・DB設計・実装順序
 - `docs/notion-schema.md` — NotionのBefore/Afterスキーマ詳細
-- `docs/notion-phrasebook-audit.md` — 外部監査レポート（2026-07-24）
+- `docs/archive/` — 完了済み指示書・監査レポート（履歴保存）
 
 ## セキュリティ
 
@@ -127,4 +127,5 @@ POST /api/scripts/{id}/sync
 - [x] フェーズ3：Script対応（全文・1文モード）
 - [x] フェーズ4：品質向上（監査修正・冪等性・セキュリティ）
 - [ ] フェーズ5：検索・統計・テスト拡充
-- [ ] フェーズ6：オフライン対応（回答キュー・完全キャッシュ）
+- [x] フェーズ6：オフライン回答キュー（IndexedDB + flush on reconnect）
+- [ ] フェーズ7：完全オフラインキャッシュ（コンテンツの SW キャッシュ）

@@ -2,84 +2,38 @@ import Link from 'next/link';
 
 export default function Home() {
   return (
-    <main
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '48px 24px 32px',
-        minHeight: '100dvh',
-      }}
-    >
-      <header style={{ marginBottom: 48 }}>
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            margin: 0,
-          }}
-        >
+    <main className="flex flex-col min-h-dvh pt-12 px-6 pb-8">
+      <header className="mb-12">
+        <h1 className="text-[22px] font-bold text-[var(--text-primary)] m-0">
           English Phrasebook
         </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
           自分専用の英語フラッシュカード
         </p>
       </header>
 
-      <section
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          flex: 1,
-        }}
-      >
+      <section className="flex flex-col gap-3 flex-1">
         {/* メイン CTA */}
         <Link
           href="/phrase"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-            padding: '24px 20px',
-            borderRadius: 12,
-            backgroundColor: 'var(--blue-accessible)',
-            textDecoration: 'none',
-            minHeight: 88,
-          }}
+          className="flex flex-col gap-1 py-6 px-5 rounded-xl bg-[var(--blue-accessible)] no-underline min-h-[88px]"
         >
-          <span
-            style={{
-              fontSize: 17,
-              fontWeight: 700,
-              color: '#ffffff',
-            }}
-          >
+          <span className="text-[17px] font-bold text-white">
             今日の学習を始める
           </span>
-          <span style={{ fontSize: 14, color: 'rgba(255,255,255,.8)' }}>
+          <span className="text-sm text-white/80">
             フレーズ復習カードを表示します
           </span>
         </Link>
 
         <Link
           href="/script"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-            padding: '20px 20px',
-            borderRadius: 12,
-            backgroundColor: 'var(--surface)',
-            border: '1px solid var(--border)',
-            textDecoration: 'none',
-            minHeight: 80,
-          }}
+          className="flex flex-col gap-1 p-5 rounded-xl bg-[var(--surface)] border border-[var(--border)] no-underline min-h-[80px]"
         >
-          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
+          <span className="text-base font-semibold text-[var(--text-primary)]">
             スクリプトを学習する
           </span>
-          <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          <span className="text-sm text-[var(--text-secondary)]">
             全文表示・1文ずつ復習
           </span>
         </Link>

@@ -9,7 +9,9 @@ import {
 } from './queue';
 import type { QueueEntry } from './queue';
 
-async function sendEntry(entry: QueueEntry): Promise<'success' | 'client-error' | 'server-error'> {
+async function sendEntry(
+  entry: QueueEntry,
+): Promise<'success' | 'client-error' | 'server-error' | 'network-error'> {
   try {
     const res = await fetch(entry.endpoint, {
       method: 'POST',
@@ -21,7 +23,9 @@ async function sendEntry(entry: QueueEntry): Promise<'success' | 'client-error' 
     if (res.status >= 400 && res.status < 500) return 'client-error';
     return 'server-error';
   } catch {
-    return 'server-error';
+    // fetch自体が失敗（オフライン・DNS未解決等）
+    console.warn('[offline-queue] network error for:', entry.key, entry.endpoint);
+    return 'network-error';
   }
 }
 
@@ -53,7 +57,7 @@ export async function flush(): Promise<void> {
         }
         await remove(entry.key);
       } else {
-        // サーバーエラー: 試行回数を増やして中断（順序保持のため後続は送らない）
+        // サーバーエラー / ネットワークエラー: 試行回数を増やして中断（順序保持のため後続は送らない）
         await incrementAttempts(entry.key);
         break;
       }
