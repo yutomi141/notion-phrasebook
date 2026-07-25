@@ -38,10 +38,13 @@ async function submitSentenceReview(payload: ReviewPayload) {
       body: JSON.stringify({ payload }),
       signal: controller.signal,
     });
-  } catch {
-    // ネットワークエラー・30秒タイムアウト → キューへ
+  } catch (err) {
+    // ネットワークエラー・10秒タイムアウト → キューへ
+    console.warn('[submitSentenceReview] fetch error caught:', err);
     if (isQueueAvailable()) {
+      console.warn('[submitSentenceReview] calling enqueue...');
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/sentence-study' });
+      console.warn('[submitSentenceReview] enqueue done, returning queued');
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');

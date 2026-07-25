@@ -26,6 +26,7 @@ export type StorageAdapter = {
 // ---- IndexedDB adapter (production) ----
 
 function openIDB(): Promise<IDBDatabase> {
+  console.warn('[openIDB] opening...');
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
@@ -34,27 +35,35 @@ function openIDB(): Promise<IDBDatabase> {
         db.createObjectStore(STORE_NAME, { keyPath: 'key' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { console.warn('[openIDB] success'); resolve(req.result); };
+    req.onerror = () => { console.warn('[openIDB] error:', req.error); reject(req.error); };
+    req.onblocked = () => console.warn('[openIDB] blocked');
   });
 }
 
 export const idbAdapter: StorageAdapter = {
   async enqueue(entry) {
+    console.warn('[idbAdapter.enqueue] opening IDB for key:', entry.key);
     const db = await openIDB();
+    console.warn('[idbAdapter.enqueue] IDB opened, starting transaction');
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const getReq = store.get(entry.key);
       getReq.onsuccess = () => {
-        if (getReq.result) { resolve(); return; } // 重複enqueueは無視
+        if (getReq.result) {
+          console.warn('[idbAdapter.enqueue] duplicate key, skipping');
+          resolve();
+          return;
+        }
+        console.warn('[idbAdapter.enqueue] putting entry...');
         const full: QueueEntry = { ...entry, enqueuedAt: new Date().toISOString(), attempts: 0 };
         store.put(full);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
+        tx.oncomplete = () => { console.warn('[idbAdapter.enqueue] tx.oncomplete'); resolve(); };
+        tx.onerror = () => { console.warn('[idbAdapter.enqueue] tx.onerror:', tx.error); reject(tx.error); };
+        tx.onabort = () => { console.warn('[idbAdapter.enqueue] tx.onabort:', tx.error); reject(tx.error ?? new Error('IDB transaction aborted')); };
       };
-      getReq.onerror = () => reject(getReq.error);
+      getReq.onerror = () => { console.warn('[idbAdapter.enqueue] getReq.onerror:', getReq.error); reject(getReq.error); };
     });
   },
 
