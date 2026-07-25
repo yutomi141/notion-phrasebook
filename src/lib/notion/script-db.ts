@@ -140,21 +140,3 @@ export async function updateScriptAfterReview(
   });
 }
 
-/** 後方互換のため残す（既存呼出し元向け） */
-export async function updateScriptLastReviewed(
-  scriptId: string,
-  reviewedAt: string,
-  doneSentences: number,
-  totalSentences: number,
-): Promise<void> {
-  const currentStatus = await fetchScriptStatus(scriptId);
-  await updateScriptAfterReview(
-    scriptId,
-    reviewedAt,
-    doneSentences,
-    totalSentences,
-    currentStatus,
-    doneSentences < totalSentences ? 'forgotten' : 'remembered',
-    null,
-  );
-}
