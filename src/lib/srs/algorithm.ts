@@ -7,12 +7,10 @@ export function calculateNextInterval(
   currentStreak: number,
 ): SRSResult {
   if (result === 'forgotten') {
-    const newStreak = 0;
     return {
       nextIntervalDays: SRS.INITIAL_INTERVAL,
-      newStreak,
+      newStreak: 0,
       newStatus: 'Reviewing',
-      easeAdjustment: -SRS.EASE_DECREASE,
     };
   }
 
@@ -36,7 +34,6 @@ export function calculateNextInterval(
     nextIntervalDays: nextInterval,
     newStreak,
     newStatus: isMastered ? 'Mastered' : 'Reviewing',
-    easeAdjustment: 0,
   };
 }
 

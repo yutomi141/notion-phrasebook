@@ -31,7 +31,6 @@ export interface SRSResult {
   nextIntervalDays: number;
   newStreak: number;
   newStatus: 'New' | 'Reviewing' | 'Mastered';
-  easeAdjustment: number;
 }
 
 export interface ScriptCard {
