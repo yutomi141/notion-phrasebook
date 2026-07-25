@@ -14,22 +14,22 @@ async function fetchCards(): Promise<PhraseCard[]> {
 
 async function submitReview(payload: ReviewPayload) {
   const onLine = typeof navigator !== 'undefined' ? navigator.onLine : true;
-  console.warn('[B3] submitReview called. navigator.onLine =', onLine);
+  console.error('[B3] submitReview called. navigator.onLine =', onLine);
 
   // オフライン確定なら即座にキューへ（HTTP/2接続キャッシュによるfetchハングを防ぐ）
   if (!onLine) {
-    console.warn('[B3] offline path: enqueueing immediately');
+    console.error('[B3] offline path: enqueueing immediately');
     if (isQueueAvailable()) {
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
-      console.warn('[B3] enqueued, returning');
+      console.error('[B3] enqueued, returning');
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');
   }
 
-  console.warn('[B3] online path: calling fetch with 5s timeout');
+  console.error('[B3] online path: calling fetch with 5s timeout');
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => { console.warn('[B3] AbortController fired'); controller.abort(); }, 5_000);
+  const timeoutId = setTimeout(() => { console.error('[B3] AbortController fired'); controller.abort(); }, 5_000);
 
   let res: Response;
   try {
@@ -41,10 +41,10 @@ async function submitReview(payload: ReviewPayload) {
     });
   } catch (err) {
     // ネットワークエラー・タイムアウト → キューへ
-    console.warn('[B3] fetch caught:', err);
+    console.error('[B3] fetch caught:', err);
     if (isQueueAvailable()) {
       await enqueue({ key: `${payload.sessionId}:${payload.itemId}`, payload, endpoint: '/api/study' });
-      console.warn('[B3] enqueued after fetch error, returning');
+      console.error('[B3] enqueued after fetch error, returning');
       return { ok: true, queued: true };
     }
     throw new Error('復習記録の保存に失敗しました');
