@@ -36,7 +36,14 @@ export async function flush(): Promise<void> {
     entries.sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
 
     for (const entry of entries) {
-      if (entry.attempts >= MAX_ATTEMPTS) continue;
+      if (entry.attempts >= MAX_ATTEMPTS) {
+        console.warn(
+          '[offline-queue] dropping entry after max attempts:',
+          entry.key, entry.endpoint,
+        );
+        await remove(entry.key);
+        continue;
+      }
 
       const result = await sendEntry(entry);
 

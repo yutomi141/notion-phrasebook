@@ -131,3 +131,67 @@ describe('I-10: オフライン回答キュー', () => {
     expect(shouldSkip).toBe(true);
   });
 });
+
+describe('B-2: MAX_ATTEMPTS 到達エントリの flush 処理', () => {
+  // flush.ts の for ループをシミュレートし、B-2修正後の動作を検証する
+
+  async function simulateFlush(fetchMock: ReturnType<typeof vi.fn>) {
+    const entries = (await getAll()).sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
+    for (const entry of entries) {
+      // B-2修正: MAX_ATTEMPTS到達エントリは削除してcontinue
+      if (entry.attempts >= MAX_ATTEMPTS) {
+        await remove(entry.key);
+        continue;
+      }
+      try {
+        const res = await fetchMock(entry.endpoint) as { ok: boolean; status?: number };
+        if (res.ok) {
+          await remove(entry.key);
+        } else if (res.status && res.status >= 400 && res.status < 500) {
+          await remove(entry.key);
+        } else {
+          await incrementAttempts(entry.key);
+          break;
+        }
+      } catch {
+        await incrementAttempts(entry.key);
+        break;
+      }
+    }
+  }
+
+  it('1. MAX_ATTEMPTS到達エントリはflushで削除され、fetchを試行しない', async () => {
+    const fetchMock = vi.fn();
+    await enqueue({ key: 'k-max', payload: basePayload, endpoint: '/api/study' });
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await incrementAttempts('k-max');
+    }
+    await simulateFlush(fetchMock);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await queueCount()).toBe(0);
+  });
+
+  it('2. MAX_ATTEMPTS未満のエントリは従来どおり送信される', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true });
+    await enqueue({ key: 'k-ok', payload: basePayload, endpoint: '/api/study' });
+    await simulateFlush(fetchMock);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await queueCount()).toBe(0);
+  });
+
+  it('3. 削除後にqueueCountが減ることを確認', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true });
+    await enqueue({ key: 'k-max', payload: basePayload, endpoint: '/api/study' });
+    await enqueue({
+      key: 'k-ok',
+      payload: { ...basePayload, itemId: 'item-2', sessionId: 'sess-2' },
+      endpoint: '/api/study',
+    });
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await incrementAttempts('k-max');
+    }
+    expect(await queueCount()).toBe(2);
+    await simulateFlush(fetchMock);
+    expect(await queueCount()).toBe(0);
+  });
+});
