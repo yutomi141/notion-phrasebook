@@ -2,18 +2,12 @@
 
 interface ReviewButtonsProps {
   onReview: (result: 'remembered' | 'forgotten') => void;
-  isPending: boolean;
+  isPending?: boolean;
 }
 
-export function ReviewButtons({ onReview, isPending }: ReviewButtonsProps) {
+export function ReviewButtons({ onReview, isPending = false }: ReviewButtonsProps) {
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 12,
-      }}
-    >
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
       <button
         onClick={() => onReview('forgotten')}
         disabled={isPending}

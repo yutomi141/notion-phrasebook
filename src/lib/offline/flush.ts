@@ -56,9 +56,12 @@ export async function flush(): Promise<void> {
           console.warn('[offline-queue] discarding entry due to 4xx:', entry.key, entry.endpoint);
         }
         await remove(entry.key);
-      } else {
-        // サーバーエラー / ネットワークエラー: 試行回数を増やして中断（順序保持のため後続は送らない）
+      } else if (result === 'server-error') {
+        // サーバーエラー: 試行回数を増やして中断（順序保持のため後続は送らない）
         await incrementAttempts(entry.key);
+        break;
+      } else {
+        // O-2: ネットワークエラーは試行回数を増やさず中断（不安定な回線で attempts 上限に達するのを防ぐ）
         break;
       }
     }

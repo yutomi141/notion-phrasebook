@@ -64,9 +64,9 @@ export function CardBack({ card, direction }: CardBackProps) {
           <p
             className="font-card"
             style={{
-              fontSize: 15,
-              lineHeight: 1.6,
-              color: 'var(--text-secondary)',
+              fontSize: 16,
+              lineHeight: 1.65,
+              color: 'var(--text-primary)',
               margin: 0,
             }}
           >

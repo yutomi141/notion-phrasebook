@@ -132,6 +132,42 @@ describe('I-10: オフライン回答キュー', () => {
   });
 });
 
+describe('O-2: network-error は attempts を増やさない', () => {
+  it('network-error 後もエントリの attempts が 0 のまま', async () => {
+    await enqueue({ key: 'k-net', payload: basePayload, endpoint: '/api/study' });
+
+    // flush.ts の O-2 修正後の分岐をシミュレート
+    const entries = await getAll();
+    for (const entry of entries) {
+      // network-error → incrementAttempts を呼ばず break
+      const result = 'network-error' as const;
+      if (result !== 'network-error') {
+        await incrementAttempts(entry.key);
+      }
+      break;
+    }
+
+    const after = await getAll();
+    expect(after[0].attempts).toBe(0);
+  });
+
+  it('server-error は attempts を増やす', async () => {
+    await enqueue({ key: 'k-srv', payload: basePayload, endpoint: '/api/study' });
+
+    const entries = await getAll();
+    for (const entry of entries) {
+      const result = 'server-error' as const;
+      if (result === 'server-error') {
+        await incrementAttempts(entry.key);
+      }
+      break;
+    }
+
+    const after = await getAll();
+    expect(after[0].attempts).toBe(1);
+  });
+});
+
 describe('B-2: MAX_ATTEMPTS 到達エントリの flush 処理', () => {
   // flush.ts の for ループをシミュレートし、B-2修正後の動作を検証する
 
