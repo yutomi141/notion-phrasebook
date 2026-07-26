@@ -22,6 +22,7 @@ function speak(text: string) {
 
 export function SentenceFlashCard({ card, direction, onReview, isPending = false }: SentenceFlashCardProps) {
   const [flipped, setFlipped] = useState(false);
+  const [flipPhase, setFlipPhase] = useState<'idle' | 'out' | 'in'>('idle');
   const isEnToJa = direction === 'EN_TO_JA';
   const frontText = isEnToJa ? card.sentence : card.meaning;
   const backText = isEnToJa ? card.meaning : card.sentence;
@@ -34,14 +35,19 @@ export function SentenceFlashCard({ card, direction, onReview, isPending = false
   const touchStartY = useRef(0);
 
   function handleFlip() {
-    if (!flipped) {
+    if (flipped || flipPhase !== 'idle') return;
+    setFlipPhase('out');
+    setTimeout(() => {
       setFlipped(true);
       speak(card.sentence);
-    }
+      setFlipPhase('in');
+      setTimeout(() => setFlipPhase('idle'), 160);
+    }, 140);
   }
 
   function handleReview(result: 'remembered' | 'forgotten') {
     setFlipped(false);
+    setFlipPhase('idle');
     onReview(result);
   }
 
@@ -85,6 +91,9 @@ export function SentenceFlashCard({ card, direction, onReview, isPending = false
             display: 'flex',
             flexDirection: 'column',
             gap: 16,
+            transform: flipPhase === 'out' ? 'scaleX(0)' : 'scaleX(1)',
+            transition: flipPhase === 'out' ? 'transform 0.14s ease-in' : flipPhase === 'in' ? 'transform 0.16s ease-out' : 'none',
+            willChange: 'transform',
           }}
         >
           {!flipped ? (

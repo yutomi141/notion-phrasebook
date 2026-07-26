@@ -24,18 +24,25 @@ function speak(text: string) {
 
 export function FlashCard({ card, direction, onReview, isPending = false }: FlashCardProps) {
   const [flipped, setFlipped] = useState(false);
+  // フリップアニメーション: 'idle' → 'out'（縮小）→ 'in'（拡大）→ 'idle'
+  const [flipPhase, setFlipPhase] = useState<'idle' | 'out' | 'in'>('idle');
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
 
   function handleFlip() {
-    if (!flipped) {
+    if (flipped || flipPhase !== 'idle') return;
+    setFlipPhase('out');
+    setTimeout(() => {
       setFlipped(true);
       speak(card.phrase);
-    }
+      setFlipPhase('in');
+      setTimeout(() => setFlipPhase('idle'), 160);
+    }, 140);
   }
 
   function handleReview(result: 'remembered' | 'forgotten') {
     setFlipped(false);
+    setFlipPhase('idle');
     onReview(result);
   }
 
@@ -56,6 +63,14 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
     [flipped],
   );
 
+  const cardTransform = flipPhase === 'out' ? 'scaleX(0)' : 'scaleX(1)';
+  const cardTransition =
+    flipPhase === 'out'
+      ? 'transform 0.14s ease-in'
+      : flipPhase === 'in'
+        ? 'transform 0.16s ease-out'
+        : 'none';
+
   return (
     <div
       className="flex flex-col gap-6 w-full"
@@ -70,7 +85,7 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
           style={{
             minHeight: 240,
             borderRadius: 12,
-            border: `1px solid var(--border)`,
+            border: '1px solid var(--border)',
             backgroundColor: 'var(--surface)',
             padding: '32px 24px',
             cursor: flipped ? 'default' : 'pointer',
@@ -79,6 +94,9 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
             display: 'flex',
             flexDirection: 'column',
             gap: 16,
+            transform: cardTransform,
+            transition: cardTransition,
+            willChange: 'transform',
           }}
         >
           {!flipped ? (

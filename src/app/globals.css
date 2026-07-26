@@ -61,6 +61,7 @@ body {
   max-width: 430px;
   margin: 0 auto;
   overflow-x: hidden;
+  overscroll-behavior: none;
   background-color: var(--canvas);
 }
 
