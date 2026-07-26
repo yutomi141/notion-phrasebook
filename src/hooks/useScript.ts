@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { enqueue, isQueueAvailable } from '@/lib/offline/queue';
 import { flush } from '@/lib/offline/flush';
 import type { ScriptCard, SentenceCard, ReviewPayload, StudyDirection } from '@/types';
@@ -98,9 +98,13 @@ export function useDueSentences() {
 }
 
 export function useSubmitSentenceReview() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ payload }: { payload: ReviewPayload }) => submitSentenceReview(payload),
     networkMode: 'always',
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue-count'] });
+    },
   });
 }
 

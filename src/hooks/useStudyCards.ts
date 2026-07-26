@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { enqueue, queueCount, isQueueAvailable } from '@/lib/offline/queue';
 import { flush } from '@/lib/offline/flush';
 import type { PhraseCard, ReviewPayload, StudyDirection } from '@/types';
@@ -71,10 +71,14 @@ export function useStudyCards() {
 }
 
 export function useSubmitReview() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ payload }: { payload: ReviewPayload }) => submitReview(payload),
-    // オフライン時もmutationFnを実行する（キュー処理を自前で管理するため）
     networkMode: 'always',
+    onSettled: () => {
+      // キュー件数バッジを即座に更新
+      queryClient.invalidateQueries({ queryKey: ['queue-count'] });
+    },
   });
 }
 
@@ -82,7 +86,8 @@ export function useQueueCount() {
   return useQuery({
     queryKey: ['queue-count'],
     queryFn: () => (isQueueAvailable() ? queueCount() : Promise.resolve(0)),
-    refetchInterval: 10_000,
+    refetchInterval: 5_000,
+    networkMode: 'always',
   });
 }
 
