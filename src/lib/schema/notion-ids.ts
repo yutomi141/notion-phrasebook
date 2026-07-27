@@ -1,3 +1,5 @@
+import 'server-only';
+
 export const NOTION_DB = {
   PHRASE:           process.env.NOTION_PHRASE_DB_ID!,
   SCRIPT_LIBRARY:   process.env.NOTION_SCRIPT_LIBRARY_DB_ID!,
