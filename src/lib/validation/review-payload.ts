@@ -7,6 +7,7 @@ const VALID_RESULTS = new Set<string>(['remembered', 'forgotten']);
 const VALID_DIRECTIONS = new Set<string>(['EN_TO_JA', 'JA_TO_EN']);
 const MAX_ID_LEN = 256;
 const MAX_SESSION_ID_LEN = 128;
+const MAX_SOURCE_ID_LEN = 64;
 
 export interface PayloadValidationResult {
   ok: boolean;
@@ -50,6 +51,17 @@ export function validateReviewPayload(
   }
   if (p.itemType !== expectedItemType) {
     return { ok: false, error: 'Invalid itemType value' };
+  }
+  // sourceId は省略可（旧クライアント・旧オフラインキューとの後方互換）。
+  // 値の妥当性はソース定義に対して呼び出し元が解決する。
+  if (p.sourceId !== undefined) {
+    if (
+      typeof p.sourceId !== 'string' ||
+      !p.sourceId.trim() ||
+      p.sourceId.length > MAX_SOURCE_ID_LEN
+    ) {
+      return { ok: false, error: 'Invalid sourceId value' };
+    }
   }
   return { ok: true };
 }

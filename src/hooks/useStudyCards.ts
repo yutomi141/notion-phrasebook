@@ -3,13 +3,26 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { enqueue, queueCount, isQueueAvailable } from '@/lib/offline/queue';
 import { flush } from '@/lib/offline/flush';
-import type { PhraseCard, ReviewPayload, StudyDirection } from '@/types';
+import type {
+  CardSourceId,
+  PhraseCard,
+  ReviewPayload,
+  StudyDirection,
+  StudySource,
+} from '@/types';
 
-async function fetchCards(): Promise<PhraseCard[]> {
-  const res = await fetch('/api/sync');
+async function fetchCards(sourceId: CardSourceId): Promise<PhraseCard[]> {
+  const res = await fetch(`/api/sync?source=${encodeURIComponent(sourceId)}`);
   if (!res.ok) throw new Error('カードの取得に失敗しました');
   const data = await res.json();
   return data.cards as PhraseCard[];
+}
+
+async function fetchSources(): Promise<StudySource[]> {
+  const res = await fetch('/api/sources');
+  if (!res.ok) throw new Error('学習モードの取得に失敗しました');
+  const data = await res.json();
+  return data.sources as StudySource[];
 }
 
 async function submitReview(payload: ReviewPayload) {
@@ -63,10 +76,19 @@ async function submitReview(payload: ReviewPayload) {
   throw new Error('復習記録の保存に失敗しました');
 }
 
-export function useStudyCards() {
+/** ソースごとにキャッシュを分離する — 別モードのカードが同一セッションへ混ざらない */
+export function useStudyCards(sourceId: CardSourceId) {
   return useQuery({
-    queryKey: ['study-cards'],
-    queryFn: fetchCards,
+    queryKey: ['study-cards', sourceId],
+    queryFn: () => fetchCards(sourceId),
+  });
+}
+
+export function useStudySources() {
+  return useQuery({
+    queryKey: ['study-sources'],
+    queryFn: fetchSources,
+    staleTime: Infinity,
   });
 }
 
@@ -100,6 +122,7 @@ export function makeReviewPayload(
   result: 'remembered' | 'forgotten',
   direction: StudyDirection,
   sessionId: string,
+  sourceId: CardSourceId = 'phrase',
 ): ReviewPayload {
   return {
     itemId: card.id,
@@ -108,5 +131,6 @@ export function makeReviewPayload(
     direction,
     sessionId,
     reviewedAt: new Date().toISOString(),
+    sourceId,
   };
 }

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { StudyStartCard } from '@/components/home/StudyStartCard';
 
 export default function Home() {
   return (
@@ -13,18 +14,8 @@ export default function Home() {
       </header>
 
       <section className="flex flex-col gap-3 flex-1">
-        {/* メイン CTA */}
-        <Link
-          href="/phrase"
-          className="flex flex-col gap-1 py-6 px-5 rounded-xl bg-[var(--blue-accessible)] no-underline min-h-[88px]"
-        >
-          <span className="text-[17px] font-bold text-white">
-            今日の学習を始める
-          </span>
-          <span className="text-sm text-white/80">
-            フレーズ復習カードを表示します
-          </span>
-        </Link>
+        {/* メイン CTA — 前回のモードでワンタップ開始 */}
+        <StudyStartCard />
 
         <Link
           href="/script"

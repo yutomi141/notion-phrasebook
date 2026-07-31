@@ -1,6 +1,7 @@
 import 'server-only';
 import { notion } from './client';
 import { NOTION_DB, REVIEW_LOG_PROPS } from '@/lib/schema/notion-ids';
+import { resolveCardSource } from '@/lib/schema/card-sources';
 import type { ReviewPayload } from '@/types';
 
 /** 同一 sessionId:itemId のログが既に存在するか確認する */
@@ -36,12 +37,15 @@ export async function writeReviewLog(
   });
   if (existing.results.length > 0) return;
 
+  // カード系はソース定義から Item Type / relation を引く（Phrase・Reading Vocab をログ上で区別する）
+  const source = payload.itemType === 'phrase' ? resolveCardSource(payload.sourceId) : null;
+  const itemTypeName =
+    payload.itemType === 'phrase' ? source?.reviewLogItemType ?? 'Phrase' : 'Script Sentence';
+
   const properties: Record<string, unknown> = {
     [REVIEW_LOG_PROPS.LOG_ENTRY]: { title: [{ text: { content: logEntry } }] },
     [REVIEW_LOG_PROPS.REVIEWED_AT]: { date: { start: reviewedAt } },
-    [REVIEW_LOG_PROPS.ITEM_TYPE]: {
-      select: { name: payload.itemType === 'phrase' ? 'Phrase' : 'Script Sentence' },
-    },
+    [REVIEW_LOG_PROPS.ITEM_TYPE]: { select: { name: itemTypeName } },
     [REVIEW_LOG_PROPS.RESULT]: {
       select: { name: payload.result === 'remembered' ? 'Remembered' : 'Forgotten' },
     },
@@ -59,7 +63,8 @@ export async function writeReviewLog(
   }
 
   if (payload.itemType === 'phrase') {
-    properties[REVIEW_LOG_PROPS.PHRASE] = { relation: [{ id: payload.itemId }] };
+    const relationProp = source?.reviewLogRelationProp ?? REVIEW_LOG_PROPS.PHRASE;
+    properties[relationProp] = { relation: [{ id: payload.itemId }] };
   } else {
     properties[REVIEW_LOG_PROPS.SCRIPT_SENTENCE] = { relation: [{ id: payload.itemId }] };
   }

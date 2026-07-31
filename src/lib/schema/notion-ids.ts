@@ -7,6 +7,11 @@ export const NOTION_DB = {
   REVIEW_LOG:       process.env.NOTION_REVIEW_LOG_DB_ID!,
 } as const;
 
+/**
+ * カードソース（Phrase DB / Reading Vocab DB）共通のプロパティ名。
+ * 実行時は card-source-schema.ts が Notion のスキーマから実名を自動検出し、
+ * 検出できなかった項目だけこの正準名にフォールバックする。
+ */
 export const PHRASE_PROPS = {
   PHRASE:            'Phrase',
   MEANING:           'Meaning',
@@ -71,6 +76,7 @@ export const REVIEW_LOG_PROPS = {
   REVIEWED_AT:       'Reviewed At',
   ITEM_TYPE:         'Item Type',
   PHRASE:            'Phrase',
+  READING_VOCAB:     'Reading Vocab',
   SCRIPT_SENTENCE:   'Script Sentence',
   RESULT:            'Result',
   DIRECTION:         'Direction',

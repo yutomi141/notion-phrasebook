@@ -2,6 +2,16 @@ export type StudyDirection = 'EN_TO_JA' | 'JA_TO_EN';
 export type ReviewResult = 'remembered' | 'forgotten';
 export type ItemType = 'phrase' | 'sentence';
 
+/** カードソース（Phrase DB / Reading Vocab DB）の識別子 */
+export type CardSourceId = 'phrase' | 'reading-vocab';
+
+/** クライアントへ公開するカードソース情報。DB ID は含めない */
+export interface StudySource {
+  id: CardSourceId;
+  label: string;
+  defaultDirection: StudyDirection;
+}
+
 export interface PhraseCard {
   id: string;
   phrase: string;
@@ -25,6 +35,11 @@ export interface ReviewPayload {
   direction: StudyDirection;
   sessionId: string;
   reviewedAt: string;
+  /**
+   * itemType が 'phrase' のときの対象 DB。
+   * 省略時は 'phrase' として扱う（旧バージョンが保存したオフラインキューとの後方互換）。
+   */
+  sourceId?: CardSourceId;
 }
 
 export interface SRSResult {

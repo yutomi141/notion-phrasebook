@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { fetchPhraseSrsState, updatePhraseAfterReview } from '@/lib/notion/phrase-db';
+import { fetchCardSrsState, updateCardAfterReview } from '@/lib/notion/card-db';
+import { resolveCardSource, type CardSource } from '@/lib/schema/card-sources';
 import { hasReviewLog, writeReviewLog } from '@/lib/notion/review-log';
 import { calculateNextInterval } from '@/lib/srs/algorithm';
 import { addDaysJST } from '@/lib/date';
@@ -13,12 +14,13 @@ interface RequestBody {
 }
 
 async function applySrsWithOptimisticLock(
-  phraseId: string,
+  source: CardSource,
+  cardId: string,
   result: 'remembered' | 'forgotten',
   logEntry: string,
   reviewedAt: string,
 ): Promise<{ srs: SRSResult; nextReviewDate: string } | { conflict: true } | { notFound: true }> {
-  const state = await fetchPhraseSrsState(phraseId);
+  const state = await fetchCardSrsState(source, cardId);
   if (!state) return { notFound: true };
 
   const srs = calculateNextInterval(result, state.intervalDays, state.correctStreak);
@@ -27,7 +29,7 @@ async function applySrsWithOptimisticLock(
   const newForgottenCount = result === 'forgotten' ? state.forgottenCount + 1 : state.forgottenCount;
 
   // I-5: 楽観ロック — 更新直前に last_edited_time を再確認
-  const fresh = await fetchPhraseSrsState(phraseId);
+  const fresh = await fetchCardSrsState(source, cardId);
   if (!fresh) return { notFound: true };
 
   if (fresh.stateVersion !== state.stateVersion) {
@@ -35,25 +37,34 @@ async function applySrsWithOptimisticLock(
     const retrySrs = calculateNextInterval(result, fresh.intervalDays, fresh.correctStreak);
     const retryNextReview = addDaysJST(new Date(), retrySrs.nextIntervalDays);
 
-    const retryFresh = await fetchPhraseSrsState(phraseId);
+    const retryFresh = await fetchCardSrsState(source, cardId);
     if (!retryFresh || retryFresh.stateVersion !== fresh.stateVersion) {
       return { conflict: true };
     }
 
-    await updatePhraseAfterReview(
-      phraseId, retrySrs.newStatus, retrySrs.nextIntervalDays, retrySrs.newStreak,
-      retryNextReview, reviewedAt,
-      fresh.reviewCount + 1,
-      result === 'forgotten' ? fresh.forgottenCount + 1 : fresh.forgottenCount,
-      logEntry,
-    );
+    await updateCardAfterReview(source, cardId, {
+      status: retrySrs.newStatus,
+      intervalDays: retrySrs.nextIntervalDays,
+      correctStreak: retrySrs.newStreak,
+      nextReviewDate: retryNextReview,
+      reviewedAt,
+      reviewCount: fresh.reviewCount + 1,
+      forgottenCount: result === 'forgotten' ? fresh.forgottenCount + 1 : fresh.forgottenCount,
+      syncVersion: logEntry,
+    });
     return { srs: retrySrs, nextReviewDate: retryNextReview };
   }
 
-  await updatePhraseAfterReview(
-    phraseId, srs.newStatus, srs.nextIntervalDays, srs.newStreak,
-    nextReviewDate, reviewedAt, newReviewCount, newForgottenCount, logEntry,
-  );
+  await updateCardAfterReview(source, cardId, {
+    status: srs.newStatus,
+    intervalDays: srs.nextIntervalDays,
+    correctStreak: srs.newStreak,
+    nextReviewDate,
+    reviewedAt,
+    reviewCount: newReviewCount,
+    forgottenCount: newForgottenCount,
+    syncVersion: logEntry,
+  });
   return { srs, nextReviewDate };
 }
 
@@ -76,6 +87,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { payload } = body;
+
+  // sourceId 未指定は phrase（旧オフラインキューのエントリを壊さない）
+  const source = resolveCardSource(payload.sourceId);
+  if (!source) {
+    return NextResponse.json({ error: 'Unknown source' }, { status: 400 });
+  }
+
   const logEntry = `${payload.sessionId}:${payload.itemId}`;
 
   try {
@@ -86,9 +104,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 2: I-4 syncVersion チェック — SRS更新済みか確認
-    const state = await fetchPhraseSrsState(payload.itemId);
+    // 親 DB が一致しないカード（別ソース）はここで 404 になり、セッションの混在を防ぐ
+    const state = await fetchCardSrsState(source, payload.itemId);
     if (!state) {
-      return NextResponse.json({ error: 'Phrase not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Card not found in source' }, { status: 404 });
     }
 
     const reviewedAt = resolveReviewedAt(payload.reviewedAt);
@@ -109,10 +128,10 @@ export async function POST(req: NextRequest) {
 
     // Step 3: SRS更新 + I-5 楽観ロック
     const result = await applySrsWithOptimisticLock(
-      payload.itemId, payload.result, logEntry, reviewedAt,
+      source, payload.itemId, payload.result, logEntry, reviewedAt,
     );
     if ('notFound' in result) {
-      return NextResponse.json({ error: 'Phrase not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Card not found in source' }, { status: 404 });
     }
     if ('conflict' in result) {
       return NextResponse.json(
