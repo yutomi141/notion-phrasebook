@@ -77,9 +77,13 @@ async function submitReview(payload: ReviewPayload) {
 }
 
 /** ソースごとにキャッシュを分離する — 別モードのカードが同一セッションへ混ざらない */
+export function studyCardsKey(sourceId: CardSourceId) {
+  return ['study-cards', sourceId] as const;
+}
+
 export function useStudyCards(sourceId: CardSourceId) {
   return useQuery({
-    queryKey: ['study-cards', sourceId],
+    queryKey: studyCardsKey(sourceId),
     queryFn: () => fetchCards(sourceId),
   });
 }
@@ -92,11 +96,39 @@ export function useStudySources() {
   });
 }
 
+interface ReviewMutationContext {
+  queryKey: ReturnType<typeof studyCardsKey>;
+  /** 取り除いたカード。保存が失敗したときに戻すために保持する */
+  removedCard: PhraseCard | undefined;
+}
+
 export function useSubmitReview() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ payload }: { payload: ReviewPayload }) => submitReview(payload),
+  return useMutation<unknown, Error, { payload: ReviewPayload }, ReviewMutationContext>({
+    mutationFn: ({ payload }) => submitReview(payload),
     networkMode: 'always',
+    // 回答したカードを未復習リストから取り除き、「今日の復習」の件数を即座に減らす。
+    // 進行中のセッションは開始時のスナップショットを使うため影響を受けない。
+    onMutate: ({ payload }) => {
+      const queryKey = studyCardsKey(payload.sourceId ?? 'phrase');
+      const removedCard = queryClient
+        .getQueryData<PhraseCard[]>(queryKey)
+        ?.find((c) => c.id === payload.itemId);
+
+      queryClient.setQueryData<PhraseCard[]>(queryKey, (old) =>
+        old?.filter((c) => c.id !== payload.itemId),
+      );
+      return { queryKey, removedCard };
+    },
+    // 保存が確定的に失敗したカードだけ戻す。
+    // オフラインキューに入った回答は成功扱いなので、ここには来ない。
+    onError: (_error, _variables, context) => {
+      const card = context?.removedCard;
+      if (!card) return;
+      queryClient.setQueryData<PhraseCard[]>(context.queryKey, (old) =>
+        old && !old.some((c) => c.id === card.id) ? [...old, card] : old,
+      );
+    },
     onSettled: () => {
       // キュー件数バッジを即座に更新
       queryClient.invalidateQueries({ queryKey: ['queue-count'] });
