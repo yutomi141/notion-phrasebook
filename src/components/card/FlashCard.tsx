@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import type { PhraseCard, StudyDirection } from '@/types';
+import { useSwipe } from '@/hooks/useSwipe';
 import { CardFront } from './CardFront';
 import { CardBack } from './CardBack';
 import { ReviewButtons } from './ReviewButtons';
@@ -26,8 +27,6 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
   const [flipped, setFlipped] = useState(false);
   // フリップアニメーション: 'idle' → 'out'（縮小）→ 'in'（拡大）→ 'idle'
   const [flipPhase, setFlipPhase] = useState<'idle' | 'out' | 'in'>('idle');
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
 
   function handleFlip() {
     if (flipped || flipPhase !== 'idle') return;
@@ -46,21 +45,9 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
     onReview(result);
   }
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!flipped) return;
-      const dx = e.changedTouches[0].clientX - touchStartX.current;
-      const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-      if (Math.abs(dx) > 60 && Math.abs(dx) > dy) {
-        handleReview(dx > 0 ? 'remembered' : 'forgotten');
-      }
-    },
-    [flipped],
+  const swipeRef = useSwipe<HTMLDivElement>(
+    (dir) => handleReview(dir === 'right' ? 'remembered' : 'forgotten'),
+    flipped,
   );
 
   const cardTransform = flipPhase === 'out' ? 'scaleX(0)' : 'scaleX(1)';
@@ -73,9 +60,10 @@ export function FlashCard({ card, direction, onReview, isPending = false }: Flas
 
   return (
     <div
+      ref={swipeRef}
       className="flex flex-col gap-6 w-full"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
+      // 回答待ちの間は水平スワイプをブラウザに渡さない（縦スクロールは許可）
+      style={{ touchAction: flipped ? 'pan-y' : 'auto' }}
     >
       <div style={{ position: 'relative' }}>
         <button

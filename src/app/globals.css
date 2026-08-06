@@ -54,6 +54,8 @@ html {
   font-size: 16px;
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
+  /* iOS のバウンススクロールはスクロール主体(html)側に指定しないと効かない */
+  overscroll-behavior: none;
 }
 
 body {

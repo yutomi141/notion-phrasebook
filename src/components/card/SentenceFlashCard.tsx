@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import type { SentenceCard, StudyDirection } from '@/types';
+import { useSwipe } from '@/hooks/useSwipe';
 import { ReviewButtons } from './ReviewButtons';
 
 interface SentenceFlashCardProps {
@@ -31,8 +32,6 @@ export function SentenceFlashCard({ card, direction, onReview, isPending = false
   const frontSize = isEnToJa ? 22 : 18;
   const backMainSize = isEnToJa ? 18 : 22;
   const backSubSize = isEnToJa ? 14 : 16;
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
 
   function handleFlip() {
     if (flipped || flipPhase !== 'idle') return;
@@ -51,28 +50,17 @@ export function SentenceFlashCard({ card, direction, onReview, isPending = false
     onReview(result);
   }
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!flipped) return;
-      const dx = e.changedTouches[0].clientX - touchStartX.current;
-      const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-      if (Math.abs(dx) > 60 && Math.abs(dx) > dy) {
-        handleReview(dx > 0 ? 'remembered' : 'forgotten');
-      }
-    },
-    [flipped],
+  const swipeRef = useSwipe<HTMLDivElement>(
+    (dir) => handleReview(dir === 'right' ? 'remembered' : 'forgotten'),
+    flipped,
   );
 
   return (
     <div
+      ref={swipeRef}
       className="flex flex-col gap-6 w-full"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
+      // 回答待ちの間は水平スワイプをブラウザに渡さない（縦スクロールは許可）
+      style={{ touchAction: flipped ? 'pan-y' : 'auto' }}
     >
       <div style={{ position: 'relative' }}>
         <button
