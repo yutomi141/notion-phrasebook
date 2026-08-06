@@ -135,12 +135,13 @@ describe('カードソースの分離', () => {
     const { fetchDueCards, getCardSource } = await load();
     mockDbQuery
       .mockResolvedValueOnce({
-        results: [makeVocabPage({ id: 'v1' })],
+        // 重複排除に巻き込まれないよう、ページごとに別のフレーズを返す
+        results: [makeVocabPage({ id: 'v1', phrase: 'erosion' })],
         has_more: true,
         next_cursor: 'cursor-1',
       })
       .mockResolvedValueOnce({
-        results: [makeVocabPage({ id: 'v2' })],
+        results: [makeVocabPage({ id: 'v2', phrase: 'sediment' })],
         has_more: false,
       });
 

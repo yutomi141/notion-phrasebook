@@ -5,6 +5,7 @@ import { resolveCardPropertyMap, type CardPropertyMap } from './card-source-sche
 import { PHRASE_PROPS } from '@/lib/schema/notion-ids';
 import type { CardSource } from '@/lib/schema/card-sources';
 import { todayJST } from '@/lib/date';
+import { dedupeCards } from '@/lib/cards/dedupe';
 import type { PhraseCard } from '@/types';
 
 /**
@@ -124,7 +125,8 @@ export async function fetchDueCards(source: CardSource): Promise<PhraseCard[]> {
     cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
   } while (cursor);
 
-  return pages.map((page) => mapPageToCard(page, props));
+  // 同じフレーズの重複行が同一セッションで2回出題されるのを防ぐ
+  return dedupeCards(pages.map((page) => mapPageToCard(page, props)));
 }
 
 export interface CardSrsState {
