@@ -17,6 +17,7 @@ import {
   saveDirection,
   saveSourceId,
 } from '@/lib/study-mode';
+import { shuffle } from '@/lib/cards/shuffle';
 import { FlashCard } from '@/components/card/FlashCard';
 import type { CardSourceId, PhraseCard, StudyDirection, StudySource } from '@/types';
 import Link from 'next/link';
@@ -267,7 +268,8 @@ function PhrasePageInner() {
       setFailedCount(0);
       setPracticeMode(true);
       sessionId.current = generateSessionId();
-      // M-4 案A: sessionCards はそのまま（同じカードで練習モード再開）
+      // M-4 案A: カードの顔ぶれはそのまま。順番だけ入れ替えて2周目を出題する
+      setSessionCards((prev) => (prev ? shuffle(prev) : prev));
     }
 
     return (
@@ -387,26 +389,26 @@ function PhrasePageInner() {
   }
 
   function buildFilteredCards(): PhraseCard[] {
-    let filtered = availableCards;
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter((c) => c.tags.some((t) => selectedTags.includes(t)));
-    }
-    if (selectedCount !== 'all') {
-      filtered = filtered.slice(0, selectedCount as number);
-    }
-    return filtered;
+    if (selectedTags.length === 0) return availableCards;
+    return availableCards.filter((c) => c.tags.some((t) => selectedTags.includes(t)));
   }
 
   function startSession() {
     const filtered = buildFilteredCards();
     if (filtered.length === 0) return;
+    // 毎回同じ順序・同じ顔ぶれにならないよう、絞り込み後にシャッフルしてから件数を切る
+    const shuffled = shuffle(filtered);
+    const picked =
+      selectedCount === 'all' ? shuffled : shuffled.slice(0, selectedCount as number);
     localStorage.setItem('study-count', String(selectedCount));
     saveSourceId(sourceId);
     sessionId.current = generateSessionId();
-    setSessionCards(filtered);
+    setSessionCards(picked);
   }
 
-  const previewCount = buildFilteredCards().length;
+  const filteredCount = buildFilteredCards().length;
+  const previewCount =
+    selectedCount === 'all' ? filteredCount : Math.min(filteredCount, selectedCount as number);
 
   return (
     <main style={{ padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
