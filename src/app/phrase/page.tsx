@@ -259,7 +259,8 @@ function PhrasePageInner() {
   /* ---------- 完了画面 ---------- */
 
   if (sessionCards && finished) {
-    const total = sessionCards.length;
+    const finishedCards = sessionCards;
+    const total = finishedCards.length;
 
     function restartSession() {
       setCardIndex(0);
@@ -269,7 +270,7 @@ function PhrasePageInner() {
       setPracticeMode(true);
       sessionId.current = generateSessionId();
       // M-4 案A: カードの顔ぶれはそのまま。順番だけ入れ替えて2周目を出題する
-      setSessionCards((prev) => (prev ? shuffle(prev) : prev));
+      setSessionCards(shuffle(finishedCards));
     }
 
     return (
@@ -396,14 +397,14 @@ function PhrasePageInner() {
   function startSession() {
     const filtered = buildFilteredCards();
     if (filtered.length === 0) return;
-    // 毎回同じ順序・同じ顔ぶれにならないよう、絞り込み後にシャッフルしてから件数を切る
-    const shuffled = shuffle(filtered);
+    // 出題対象は期限が古い順に選ぶ（SRSの優先度を保つ）。
+    // そのうえで出題順だけシャッフルし、毎回同じ並びにならないようにする。
     const picked =
-      selectedCount === 'all' ? shuffled : shuffled.slice(0, selectedCount as number);
+      selectedCount === 'all' ? filtered : filtered.slice(0, selectedCount as number);
     localStorage.setItem('study-count', String(selectedCount));
     saveSourceId(sourceId);
     sessionId.current = generateSessionId();
-    setSessionCards(picked);
+    setSessionCards(shuffle(picked));
   }
 
   const filteredCount = buildFilteredCards().length;
