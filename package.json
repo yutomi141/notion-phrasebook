@@ -21,7 +21,7 @@
     "server-only": "^0.0.1"
   },
   "engines": {
-    "node": ">=20 <21"
+    "node": ">=24 <25"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
